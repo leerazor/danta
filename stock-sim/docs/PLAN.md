@@ -1,15 +1,15 @@
 # stock-sim 실행 계획 (PLAN)
 
-작성일 2026-09-30 · 현재 상태: **W2(Phase 2) 완료 — reviewer PASS(`docs/reviews/phase2-1.md`, Med·Low 반영), W3(Phase 3 ∥ 4) 진행 중**
+작성일 2026-09-30 · 현재 상태: **W3 완료(Phase 3·4 reviewer PASS 2회차), W4 최종 실행 완료 — 사용자 확인 대기(v1)**
 
 ## 0. 진행 체크리스트 (오케스트레이터가 갱신)
 - [x] Phase 0 지침 수립 — `CLAUDE.md`, `.claude/agents/` 6개, 이 문서
 - [x] W1 · Phase 1 조사 — `kis-researcher` ×3 병렬 → `docs/research/{kis-api,market-rules,universe}.md` (결론: DEV 일봉·지수 일봉 지원 추정(샘플 코드 근거, 실호출 미검증 → Phase 3 smoke test에서 확정))
 - [x] W2 · Phase 2a 로직 — `strategy-designer` → `docs/strategy.md` → reviewer PASS (확정 전략: 20일 수익률 상위 5종목 주간 리밸런싱 `momentum_topn`)
 - [x] W2 · Phase 2b 설계 — `architect` → `docs/architecture.md`, `docs/result.example.json` → reviewer PASS
-- [ ] W3 · Phase 3 구현 — `implementer` → `src/`, `tests/`, `config.yaml`, `output/result.json` → reviewer PASS
-- [ ] W3 · Phase 4 대시보드 — `dashboard-builder`(Phase 3과 병렬, `result.example.json` 기준) → `templates/`, `render.py`, `output/dashboard.html` → reviewer PASS
-- [ ] W4 · Phase 5 최종 실행·검수 — 사용자 확인
+- [x] W3 · Phase 3 구현 — `implementer` → `src/`, `tests/`, `config.yaml`, `output/result.json` → reviewer PASS (`phase3-1.md` PASS·Med 2 → 수정 → `phase3-2.md` PASS, Low 3 중 테스트·PLAN 명령 반영)
+- [x] W3 · Phase 4 대시보드 — `dashboard-builder`(Phase 3과 병렬, `result.example.json` 기준) → `templates/`, `render.py`, `output/dashboard.html` → reviewer PASS (`phase4-1.md` PASS·Med 2 → UX P1·승인된 규약 변경(C-1~C-3)과 함께 수정 → `phase4-2.md` PASS). DEV 일봉·지수 실호출 smoke test 통과
+- [ ] W4 · Phase 5 최종 실행·검수 — 최종 실행 완료(2026-09-30: `uv run pytest` 152 passed, 공식 진입점 API 0회·캐시 11건, 총수익률 -0.84%, KOSPI +3.89%, 초과 -4.73%p, MDD -5.14%, 거래 13회, 최종 평가액 99,161,144원). **사용자 확인 대기**
 - [ ] W5a · Phase 6 개선 루프(탐색) — `alpha-researcher`(Phase 3 PASS 후) ∥ `kis-researcher`(D) ∥ `ux-reviewer` → `docs/alpha/exp-1.md`, `docs/research/volume-data.md`, `docs/reviews/ux-1.md` → 채택안·UX P1을 사용자에게 한 번에 질문
 - [ ] W5b · Phase 6 개선 루프(반영) — `strategy-designer` ∥ `dashboard-builder` → `implementer` → `reviewer` ×2 PASS → 통합 실행
 
@@ -17,6 +17,8 @@
 
 ### 진행 회고 (웨이브마다 3줄, CLAUDE.md 6.7)
 - W1~W2: (소급 기록 없음)
+- W3: (1) 가장 오래 걸린 agent는 `implementer`(1회차 약 19분) — KIS 실호출·한글 경로 venv 문제 진단. (2) 재작업 원인: 문서 간 충돌(CLAUDE.md 1절 "매매 내역" vs 8절 매핑 표)과 손실 케이스 문장 규칙 공백을 실데이터에서야 발견. (3) 다음 웨이브에서는 `result.example.json`에 손실·빈 배열 케이스를 처음부터 넣고, 계약 문서 개정은 Edit로 해당 줄만 고치게 한다(전체 재작성은 diff 확인 비용이 크다).
+- 결정 기록(2026-09-30): 진입점 = `uv run --directory src python -m stock_sim run --config ../config.yaml`(Python 3.11 유지), 대시보드 규약 C-1(어두운 배경 손익색)·C-2(손익 기여 절댓값 기준)·C-3(매매 내역 표) 승인, C-4(주차별 스택 구조) 보류.
 
 ## 1. MVP 범위
 ### 포함
@@ -63,11 +65,11 @@
 - Phase 3 순서: 골격 → `kis_client` + smoke test → `data` → `strategy`/`backtest`/`metrics`(+테스트) → `report` → `cli` → 실데이터 실행.
 - smoke test 실패 시 원인 보고 후 대기(PROD 임의 사용 금지). 이 경우에도 dashboard-builder는 계속 진행한다.
 - Phase 4 입력: `docs/result.example.json`. 산출: 템플릿 + `render.py` + `output/dashboard.example.html`(검증용).
-- 통합: 두 agent 완료 후 오케스트레이터가 `uv run python -m stock_sim run --config config.yaml`로 실데이터 `result.json` + `dashboard.html` 생성.
+- 통합: 두 agent 완료 후 오케스트레이터가 `stock-sim/`에서 `uv run --directory src python -m stock_sim run --config ../config.yaml`(CLAUDE.md 7절)로 실데이터 `result.json` + `dashboard.html` 생성.
 - 리뷰: `reviewer` 2개 동시 위임 → `docs/reviews/phase3-1.md` ∥ `docs/reviews/phase4-1.md`. FAIL이면 findings를 담당 agent에게 동시에 전달 → 수정 → 재리뷰(Phase별 최대 2회).
 
 ### Phase 5 최종 실행·검수 (오케스트레이터)
-- `uv run python -m stock_sim run --config config.yaml` 한 번으로 `result.json` + `dashboard.html`이 생성되는지 확인.
+- `stock-sim/`에서 `uv run --directory src python -m stock_sim run --config ../config.yaml` 한 번으로 `result.json` + `dashboard.html`이 생성되는지 확인.
 - 사용자에게 보고: 대시보드 파일 경로, 요약 KPI(수익률·MDD·거래 횟수), 한계 고지(1개월 표본).
 - 이 문서 체크리스트 갱신, v2 후보 정리.
 

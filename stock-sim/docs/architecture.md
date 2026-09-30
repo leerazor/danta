@@ -7,6 +7,7 @@
 
 ## 0. 설계 원칙
 - 모듈 9개, 파일당 200줄 목표. 프레임워크 없음. 클래스는 `KisClient`와 예외 클래스뿐이다.
+  - (개정 1.2) 예외 기록: `report.py`는 약 680줄로 목표를 넘는다(result.json 조립·좌표·strategy.md 10절 문장 생성이 한 파일에 있다). 지금은 기록만 하고 분할은 v2 후보로 둔다(모듈 추가는 1.7절대로 보고 후 승인).
 - 네트워크는 `kis_client.py` 한 곳. `strategy`·`backtest`·`metrics`는 순수 함수(파일·네트워크·시계 접근 없음).
 - 캐시 우선. 캐시가 있으면 API를 호출하지 않는다. 테스트는 fixture CSV만 쓴다.
 - R2는 구조로 강제한다: `KisClient`에는 토큰 발급과 시세 조회 2종 외의 메서드·경로 상수가 없다. 주문·계좌 경로 문자열은 코드 어디에도 두지 않는다(테스트로 검사, 8.3절).
@@ -94,10 +95,12 @@ def check_data(prices: dict[str, DataFrame], calendar: list[date]) -> list[dict]
 def load_all(cfg: dict, period: dict, client: KisClient | None, refresh: bool = False
              ) -> tuple[dict[str, DataFrame], DataFrame, list[dict], dict]
     # (prices{code: df}, benchmark_df, data_issues, source_info{"api_calls","cache_hits"})
+def issues_path(path: Path) -> Path                                                      # (개정 1.2) 6.1절 이슈 보조 파일 경로
 ```
 - `client=None`인데 캐시가 없으면 `FileNotFoundError`(테스트·오프라인 실행용).
 - 구간 분할: 종목은 `max_days=130`(달력일, 약 90거래일 < 100건), 지수는 `max_days=60`(약 42거래일 < 50건 추정). 조각마다 1회 호출 → 합침 → 날짜 기준 중복 제거 → 오름차순. 기본 구간(05-31~09-29, 122일)은 종목 1회, 지수 3회 = 총 13회 호출.
 - 잘림 의심 검사: 한 조각의 응답 건수가 종목 100건 또는 지수 50건 이상이면 경고 로그 + `data_issues`에 `TRUNCATION_SUSPECT`.
+  - (개정 1.2) 잘림 의심 데이터는 이번 실행에서는 쓰되 캐시에 저장하지 않는다. 캐시 적중 시 `NON_INTEGER_PRICE`를 복원하는 보조 파일 규칙과 함께 6.1절에 적었다.
 
 ### 1.4 `strategy.py` — 신호(목표 종목) 계산. 순수 함수
 ```python
@@ -133,6 +136,8 @@ def run_backtest(prices: dict[str, DataFrame], calendar: list[date],
 def benchmark_curve(benchmark: DataFrame, days: list[date], capital: int) -> tuple[DataFrame, dict]
     # (date, close, value, ret) + {"base_price", "base_kind": "d1_open" | "prev_close"}
 def equal_weight_return(prices: dict[str, DataFrame], days: list[date]) -> float | None
+def equal_weight_count(prices: dict[str, DataFrame], days: list[date]) -> int
+    # (개정 1.2) 동일가중 계산에 들어간 종목 수(d1에 유효 봉이 있고 dn 이하 유효 종가가 있는 종목). strategy.md 10.1절 ①의 n
 def summarize(trades: DataFrame, snapshots: DataFrame, positions: DataFrame,
               bench: DataFrame, capital: int) -> dict          # 5.3절 summary의 원값(비율은 소수)
 def closed_trades(trades: DataFrame) -> DataFrame              # 매수~매도 한 쌍 단위
@@ -140,6 +145,7 @@ def per_stock(trades: DataFrame, positions: DataFrame, universe: list[dict], cap
 def weekly_flow(trades: DataFrame, snapshots: DataFrame) -> list[dict]   # ISO 주 단위
 ```
 - metrics의 비율은 **반올림하지 않은 소수**(0.0186)다(strategy.md 4.2절). `%` 단위 변환과 자리수 맞춤은 `report.py`만 한다.
+- (개정 1.2) `equal_weight_return`이 None이 아니면 `equal_weight_count ≥ 1`이고, 두 함수는 같은 종목 집합을 쓴다. `cli`가 두 값을 `bench_info`에 넣어 `report.build_result`로 넘긴다(1.7절 표).
 
 ### 1.7 `report.py` — result.json 조립(좌표·비율·문장 포함)과 저장
 ```python
@@ -149,14 +155,48 @@ def polyline_points(values: list[float], width: float, height: float,
 def nice_axis(v_min: float, v_max: float) -> tuple[float, float, list[float]]   # 5.5절 규칙
 def build_alerts(summary: dict, stocks: list[dict], positions: list[dict],
                  issues: list[dict], events: list[dict], period: dict) -> list[dict]
-def build_insights(summary: dict, stocks: list[dict], closed: DataFrame, alerts: list[dict]
-                   ) -> tuple[list[dict], dict]                # (insights 3개, next_action)
+def build_insights(summary: dict, stocks: list[dict], closed: DataFrame, alerts: list[dict],
+                   positions: list[dict] | None = None, equal_weight: float | None = None,
+                   equal_weight_count: int | None = None
+                   ) -> tuple[list[dict], dict]                # (insights 3개, next_action)  (개정 1.2)
 def build_result(cfg: dict, period: dict, bt: dict, bench: DataFrame, bench_info: dict,
                  issues: list[dict], source_info: dict, generated_at: str) -> dict   # 순수
 def write_result(result: dict, path: Path) -> Path
     # json.dump(ensure_ascii=False, indent=2, allow_nan=False), UTF-8. 폴더 없으면 생성.
 ```
 - 200줄을 넘기면 좌표 계산 함수(`polyline_points`, `nice_axis`)를 `report.py` 안에서만 쓰는 비공개 헬퍼로 정리한다. 모듈을 새로 늘리려면 보고 후 승인을 받는다.
+- (개정 1.2) `build_insights`의 뒤 세 인자는 **기본값 있는 키워드 인자**다(기존 위치 인자 4개 호출과 호환). `positions`는 result의 `positions[]` 모양(`code, name, unrealized_pnl` 사용, strategy.md 10.1절 ② 종목 절·10.2절 3번), `equal_weight`는 동일가중 수익률 원값(소수, None이면 ① 뒤 문장 생략), `equal_weight_count`는 ①의 `n`. `equal_weight`가 있는데 `equal_weight_count`가 None이면 `stocks` 중 `status != "excluded"`인 종목 수로 대신한다. `closed`는 시그니처 호환용으로 남아 있고 10절 문장에는 쓰지 않는다. `build_result`는 `positions=positions, equal_weight=bench_info["equal_weight_return"], equal_weight_count=bench_info["equal_weight_count"]`로 부른다.
+
+(개정 1.2, 리뷰 phase3-1 Low 6) **1.1~1.9절 시그니처 밖의 공개 이름과 cli가 넘기는 값.** 아래 이름은 구현에 있고 다른 모듈·테스트가 쓸 수 있다. 계약상 이름·반환 모양을 바꾸려면 보고한다.
+
+| 모듈 | 이름 | 시그니처·값 | 용도 |
+|---|---|---|---|
+| `config` | `cost_rates` | `(cfg: dict) -> dict` → `{"buy_rate", "sell_rate", "slippage_rate"}` | 3.1절 % → 비율 변환. `cli`가 `run_backtest(costs=...)`에 넘긴다 |
+| `data` | `DataError` | `class DataError(Exception)` | 유효 종목 0개·지수 없음·워밍업 부족·거래일 0일. 종료 코드 3 |
+| `data` | `make_issue` | `(code, stock=None, day=None, value=None, excluded=False, side=None, extra=None) -> dict` | 4.4절 공통 모양 생성 |
+| `data` | `read_cache` | `(path: Path, integer_prices: bool) -> DataFrame \| None` | 6.1절 적중 판정. 없거나 깨졌거나 비었으면 None. `cli`의 "전 파일 캐시 여부" 확인에도 쓴다 |
+| `data` | `index_cache_code` | `(index_code: str) -> str` → `"IDX" + 업종코드` | 지수 캐시 파일명·지수 `TRUNCATION_SUSPECT`의 `stock` 값 |
+| `data` | `issues_path` | `(path: Path) -> Path` → `<캐시명 stem>.issues.json` | 6.1절 이슈 보조 파일 |
+| `kis_client` | `unsupported_message` | `(env, api_name, msg_cd, msg1, http_status=None) -> str` | 7절 DEV 미지원 고정 문안 |
+| `backtest` | `rate_to_int` | `(rate: float) -> int` | 비율 → 1억분율 정수(`SCALE = 10**8`, Decimal half-up) |
+| `backtest` | `calc_cost` | `(amount: int, rate: float) -> int` | 비용 = 거래대금 × 율, 원 단위 half-up |
+| `backtest` | `fill_price` | `(open_price: int, slippage_rate: float, side: str) -> int` | 체결가 = 시가 × (1 ± 슬리피지), half-up |
+| `backtest` | `calc_qty` | `(alloc: int, price: int, buy_rate: float) -> int` | 비용 포함 금액이 `alloc`을 넘지 않는 최대 정수 수량 |
+| `strategy` | `to_bars` | `(df: DataFrame) -> dict[date, tuple[int, int, int]]` | `{날짜: (시가, 종가, 거래량)}`. metrics 동일가중도 쓴다 |
+| `strategy` | `is_valid_bar` | `(bar: tuple \| None) -> bool` | 유효 봉: 행 있음, 시가·종가·거래량 > 0 |
+| `strategy` | `STRATEGIES[name]["label"]` | `(params: dict) -> str` | `meta.strategy.label` 문자열(예 "20일 수익률 상위 5종목 · 주간 리밸런싱") |
+| `metrics` | `equal_weight_count` | 1.6절 | strategy.md 10.1절 ①의 n |
+
+| cli → `build_result` 인자 | 키 | 출처 |
+|---|---|---|
+| `period` | `fetch_start`, `requested_start`, `end` | `config.resolve_period` |
+| `period` | `rebalances` | `len(schedule)`. cli가 추가한다(없으면 report가 주 수로 대신) |
+| `bench` | `date, close, value, ret` | `metrics.benchmark_curve`의 반환 DataFrame(원 지수 DataFrame이 아니다) |
+| `bench_info` | `base_price`, `base_kind` | `metrics.benchmark_curve`의 반환 dict |
+| `bench_info` | `equal_weight_return` | `metrics.equal_weight_return(prices, days)` (None 가능) |
+| `bench_info` | `equal_weight_count` | `metrics.equal_weight_count(prices, days)` |
+| `source_info` | `api_calls`, `cache_hits` | `data.load_all` |
+| `generated_at` | ISO 8601 초 단위, `+09:00` | `datetime.now(KST).isoformat(timespec="seconds")` |
 
 ### 1.8 `render.py` — result.json → HTML (dashboard-builder 소유)
 ```python
@@ -267,7 +307,7 @@ output:
 ```
 ### 3.1 규칙
 - 종목 코드는 **따옴표 문자열**(앞자리 0 보존). 상대 경로는 config 파일 폴더 기준.
-- 비용 변환: `buy_rate = buy_fee_pct / 100`, `sell_rate = (sell_fee_pct + sell_tax_pct) / 100`, `slippage_rate = slippage_pct / 100`. 기본값으로 0.00015 / 0.00215 / 0. strategy.md 4.2절의 정수 연산을 쓰려면 10만분율 정수(15, 215)로 바꿔 쓴다.
+- 비용 변환: `buy_rate = buy_fee_pct / 100`, `sell_rate = (sell_fee_pct + sell_tax_pct) / 100`, `slippage_rate = slippage_pct / 100`. 기본값으로 0.00015 / 0.00215 / 0. strategy.md 4.2절의 정수 연산은 1억분율 정수(`backtest.rate_to_int`, `SCALE = 10**8`: 15,000 / 215,000)로 바꿔 쓴다. 결과는 10만분율 식과 같다. (개정 1.2)
 - 누락된 키는 위 기본값으로 채운다. 알 수 없는 최상위 키는 경고 로그만 남긴다.
 - 알림 임계값(MDD −5% 등)은 strategy.md 10.3절의 고정 표시 규칙이라 config에 두지 않는다.
 
@@ -423,7 +463,7 @@ output:
 | `excess_return_pct`(+`_sign`) | 초과수익(%p) = 총수익률 − 벤치마크 |
 | `equal_weight_return_pct`(+`_sign`) | 유니버스 동일가중 buy&hold(보조, null 가능) |
 | `excess_vs_equal_weight_pct`, `excess_vs_equal_weight_sign` (개정 1.1) | 동일가중 대비 초과수익(%p) = 총수익률 − 유니버스 동일가중. 반올림 전 원값끼리 뺀 뒤 소수 4자리로 반올림한다. 동일가중이 null이면 값은 null, sign은 `"zero"` |
-| `mdd_pct`, `mdd_sign`, `mdd_peak_date`, `mdd_trough_date` | MDD(0 이하). MDD가 0이면 두 날짜는 null. 낙폭의 고점이 초기 자본(E0, 첫 거래일 이전)이면 `mdd_peak_date`만 null이고, 템플릿은 null인 고점 날짜를 "시작"으로 표시한다. `charts.equity.caption` 등 report.py가 만드는 문장에서도 "시작"으로 쓴다 (리뷰 phase2-1 Med 2 반영) |
+| `mdd_pct`, `mdd_sign`, `mdd_peak_date`, `mdd_trough_date` | MDD(0 이하). MDD가 0이면 두 날짜는 null. 낙폭의 고점이 초기 자본(E0, 첫 거래일 이전)이면 `mdd_peak_date`만 null이고, 템플릿은 null인 고점 날짜를 "시작"으로 표시한다. `charts.equity.caption` 등 report.py가 만드는 문장에서도 "시작"으로 쓴다 (리뷰 phase2-1 Med 2 반영). (개정 1.2) 표기 통일: `charts.equity.caption`과 템플릿의 null 고점 표시는 **"시작"**, strategy.md 10절 문장(`insights` ③ 리스크, `alerts`의 `MDD_BREACH` detail, `next_action` 5번)은 **"초기 자본"**을 쓴다. 두 표기 모두 허용하며, 위치별로 정해진 쪽만 쓴다 |
 | `trade_count`, `buy_count`, `sell_count` | 체결 건수 |
 | `closed_count`, `win_count`, `loss_count` | 청산 거래 수, 이익·손실 건수 |
 | `win_rate_pct` | 승률. 청산 0건이면 null |
@@ -481,7 +521,7 @@ output:
 | `weekly_flow[].label` | 그 주 첫 거래일 `MM-DD` |
 | `per_stock[].bar_pct`, `top_contributors.items[].bar_pct` | `|total_pnl| / max|total_pnl| × 100`(거래한 종목 전체 기준, 최댓값 0이면 0). 막대 색은 `sign`. (개정 1.1) `items[].bar_pct`는 같은 종목의 `per_stock[].bar_pct`와 같은 값이다. 절댓값 순으로 뽑으므로 1위 막대는 항상 100이고 아래로 갈수록 짧아진다 |
 | `top_contributors.items[]` | (개정 1.1, UX C-2) 거래한 종목(`status`가 `held` 또는 `closed`. `no_trade`·`excluded`는 제외)을 **`|total_pnl|` 절댓값 내림차순**(동률은 종목코드 오름차순)으로 최대 5개. `rank`는 그 순서 1~5, `pnl = total_pnl`(부호 그대로), `sign`은 `pnl`의 부호. 이익 종목과 손실 종목이 섞여 나온다 |
-| `top_contributors.note` | (개정 1.1) 고정 틀: `"이익 N종목 합계 +X원, 손실 M종목 합계 -Y원 → 총손익 Z원"`. **상위 5가 아니라 거래한 전 종목 기준**이다. N·X = `total_pnl > 0`인 종목 수와 그 합, M·Y = `total_pnl < 0`인 종목 수와 그 합, Z = `summary.total_pnl`. 한 종목은 한쪽에만 들어가므로(0인 종목은 어느 쪽에도 넣지 않는다) **X + Y = Z가 성립한다.** 금액은 부호 포함 콤마(`signed_won`과 같은 표기, 음수 기호는 ASCII `-`), 해당 종목이 0개면 `"이익 0종목 합계 0원"`처럼 쓴다. 거래한 종목이 없으면 기존대로 `"거래한 종목이 없습니다."`. 기존 "상위 5종목 손익 합계 …, 손실 M종목 합계 …" 문구는 쓰지 않는다(중복 집계) |
+| `top_contributors.note` | (개정 1.2) **문장 틀은 strategy.md 10.4절을 따른다**(5개 분기: 거래 0건 / 이익·손실 모두 있음 / 손실 종목 없음 / 이익 종목 없음 / 손익 0). 집계는 상위 5가 아니라 `per_stock[]` 전 종목의 `total_pnl` 기준이다(`no_trade`·`excluded`는 0이라 어느 쪽에도 들어가지 않는다). 한 종목은 이익·손실 중 한쪽에만 들어가므로 X − Y = Z(= `summary.total_pnl`)가 성립한다. 부호 표기는 strategy.md 10.0절(ASCII `-`). "상위 5종목 손익 합계 …" 문구는 쓰지 않는다(중복 집계) |
 | `per_stock[].contribution_pct` | `total_pnl / 초기 자본 × 100` |
 | `per_stock[].realized_pnl_sign` | (개정 1.1) `sign_of(realized_pnl)` |
 | `summary.excess_vs_equal_weight_pct` | (개정 1.1) `(total_return − equal_weight_return) × 100`, 소수 4자리. 동일가중이 null이면 null. `excess_vs_equal_weight_sign = sign_of(값)` |
@@ -489,8 +529,8 @@ output:
 | `target.current_return_pct`, `target.current_return_sign` | (개정 1.1) 현재(기말) 총수익률. `summary.total_return_pct`·`total_return_sign`과 같은 값이며 기존 `target.actual_return_pct`·`target.sign`과도 같다(기존 키는 그대로 둔다) |
 | `target.gap_pct` | (개정 1.1) `현재 수익률 − 목표 수익률`(%p, 부호 있음, 소수 4자리). 미달이면 음수, 달성이면 0 이상. 예: −0.84 − 2.00 = −2.84 |
 | `target.gap_amount` | 기존 정의 그대로 `max(target_equity − final_equity, 0)`: 목표 평가금액까지 **부족한 금액**(달성하면 0). 초과 금액은 필드로 두지 않고 `caption` 문장 안에만 넣는다(`final_equity − target_equity`) |
-| `target.caption` | (개정 1.1, UX P1-4) 미달(`achieved == false`): `"목표 +2.00%에 2.84%p 못 미쳤습니다(현재 -0.84%). 목표 평가금액까지 2,838,856원 부족."` — 순서대로 `target_return_pct`(부호 포함 2자리), `|gap_pct|`(2자리 + `%p`), `current_return_pct`(부호 포함 2자리), `gap_amount`(콤마). 현재 수익률이 양수여도 미달이면 같은 틀이다. 달성(`achieved == true`): `"목표 +2.00%를 0.50%p 넘었습니다(현재 +2.50%). 목표 평가금액을 500,000원 초과."` **금지: "목표 +2.00% 대비 −41.94% 달성"처럼 진척률(`progress_raw_pct`)을 문장에 넣는 표현.** 음수 진척률은 뜻이 통하지 않으므로 달성률 문구 자체를 쓰지 않는다. `progress_raw_pct`·`progress_pct`는 막대 폭 용도로만 남는다 |
-| `insights`, `next_action` | strategy.md 10.1·10.2절 문장 틀. `title`은 고정: `"벤치마크 비교"`, `"손익 분해"`, `"리스크"`(개정 1.1, strategy.md 10.1절. 종전 "벤치마크 대비"/"종목 기여"/"거래·위험"은 쓰지 않는다). `detail`이 10.1절 문장. (개정 1.1) 동일가중 비교 문장에 쓸 수치로 `summary.excess_vs_equal_weight_pct`를 제공한다. 이 문서는 필드만 정하고, 인사이트·다음 조치 문장은 strategy.md 10절을 따른다 |
+| `target.caption` | (개정 1.2) **문장 틀은 strategy.md 10.5절을 따른다**(미달 / 목표 평가금액과 같음 / 초과 달성의 3분기, 판정은 정수 원 `final_equity` 대 `target_equity`). 예(미달): `"목표 +2.00%에 2.84%p 못 미쳤습니다(현재 -0.84%). 목표 평가금액까지 2,838,856원 부족."` **금지: "목표 +2.00% 대비 −41.94% 달성"처럼 진척률(`progress_raw_pct`)을 문장에 넣는 표현.** 음수 진척률은 뜻이 통하지 않으므로 달성률 문구 자체를 쓰지 않는다. `progress_raw_pct`·`progress_pct`는 막대 폭 용도로만 남는다 |
+| `insights`, `next_action` | strategy.md 10.1·10.2절 문장 틀. `title`은 고정: `"벤치마크 비교"`, `"손익 분해"`, `"리스크"`(개정 1.1, strategy.md 10.1절. 종전 "벤치마크 대비"/"종목 기여"/"거래·위험"은 쓰지 않는다). `detail`이 10.1절 문장. (개정 1.1) 동일가중 비교 문장에 쓸 수치로 `summary.excess_vs_equal_weight_pct`를 제공한다. 이 문서는 필드만 정하고, 인사이트·다음 조치 문장은 strategy.md 10절을 따른다. (개정 1.2) 문장 재료는 `build_insights`의 키워드 인자 `positions`(② 종목 절, 다음 조치 3번), `equal_weight`, `equal_weight_count`(① 뒤 문장의 `n`)로 받는다(1.7절) |
 
 ### 5.6 빈 경우의 표현
 | 상황 | JSON | 템플릿 표시 |
@@ -514,9 +554,10 @@ output:
 | 파일명 | 종목 `<종목코드>_<시작>_<종료>.csv` (예 `005930_20260531_20260929.csv`). 지수 `IDX<업종코드>_<시작>_<종료>.csv` (예 `IDX0001_20260531_20260929.csv`). 날짜는 **요청 구간**(`fetch_start`, `end`)의 `YYYYMMDD` |
 | 내용 | 4.1절 컬럼, UTF-8, 헤더 있음, `date`는 `YYYY-MM-DD`, 오름차순 |
 | 적중 판정 | 같은 이름의 파일이 있고, 읽었을 때 필수 컬럼이 모두 있고 1행 이상 |
-| 적중 시 | API를 호출하지 않는다. 전 파일 적중이면 토큰도 발급하지 않는다 |
+| 적중 시 | API를 호출하지 않는다. 전 파일 적중이면 토큰도 발급하지 않는다. (개정 1.2) 이슈 보조 파일이 있으면 읽어 `NON_INTEGER_PRICE`를 복원한다(아래 행) |
 | 무효화 | ① 요청 구간이 바뀌면 파일명이 달라져 자동 미적중 ② `--refresh` ③ 파일 수동 삭제 ④ 파일이 깨졌거나 비었으면 미적중으로 보고 다시 받는다 |
-| 저장 조건 | 정규화 결과가 1행 이상일 때만 쓴다. 빈 응답은 캐시하지 않는다 |
+| 저장 조건 | 정규화 결과가 1행 이상일 때만 쓴다. 빈 응답은 캐시하지 않는다. (개정 1.2) 또한 **어느 조각이든 응답 건수가 상한(종목 100건, 지수 50건)에 닿으면**(`TRUNCATION_SUSPECT`) 캐시에 쓰지 않고, 같은 이름의 기존 CSV와 이슈 보조 파일도 지운다. 그 데이터는 이번 실행에만 쓴다. 다음 실행은 캐시 미적중이라 다시 받아 `TRUNCATION_SUSPECT`를 다시 경고한다. `client=None`(오프라인)이면 `FileNotFoundError`(종료 코드 3) |
+| 이슈 보조 파일 (개정 1.2) | 파일명 `<캐시명 stem>.issues.json`(예 `005930_20260531_20260929.issues.json`, `data.issues_path`), 내용 `{"non_integer_price": true}`, UTF-8. **비정수 가격이 있던 수집에서만** CSV와 함께 쓴다. 이후 수집(`--refresh` 등)에서 비정수 가격이 없으면 기존 보조 파일을 지운다. 캐시 적중 시 보조 파일이 없거나 깨졌으면(JSON 오류·dict 아님) "이슈 없음"으로 본다(깨진 경우 경고 로그). CSV 컬럼·파일명 규칙은 바뀌지 않는다 |
 | 환경 | 파일명에 DEV/PROD를 넣지 않는다(같은 시세로 본다). 실제로 쓴 환경은 `meta.data_source.env`에 남긴다 |
 - `end: auto`는 날마다 `end`가 바뀌므로 다음 날 실행하면 새 파일을 받는다. 같은 날 재실행은 호출 0회다. 오래된 파일은 지우지 않는다(수동 관리).
 - 동시 실행은 고려하지 않는다(잠금 없음).

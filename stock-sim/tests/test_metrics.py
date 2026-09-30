@@ -133,6 +133,13 @@ def test_mdd_peak_is_start_when_first_day_is_below_capital():
     assert s["mdd_peak_date"] is None and s["mdd_trough_date"] == date(2026, 9, 21)
 
 
+def test_mdd_peak_tie_takes_day_closest_to_trough():
+    days = [date(2026, 9, d) for d in range(1, 6)]
+    dd = metrics._drawdown([101, 100, 101, 99, 99], days, 100)   # strategy.md 10.1절 ③ 동률 규칙
+    assert dd["mdd_peak_date"] == date(2026, 9, 3) and dd["mdd_trough_date"] == date(2026, 9, 4)
+    assert dd["mdd"] == pytest.approx(99 / 101 - 1)
+
+
 def test_zero_trades():
     run = run_hand()
     bt = backtest.run_backtest(run["prices"], run["calendar"], run["schedule"],

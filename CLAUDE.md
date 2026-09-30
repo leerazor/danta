@@ -117,7 +117,7 @@ W5는 반복할 수 있다(회차마다 `docs/alpha/exp-<회차>.md`). 기준 �
 ### 6.6 병렬 실행 규칙
 - 동시에 도는 agent는 **쓰는 파일이 겹치면 안 된다**. 위임 프롬프트의 "쓸 것"에 파일 단위로 명시한다.
 - W1: `kis-researcher` 3개는 각자 조사 항목 하나(A/B/C)와 문서 하나만 맡는다.
-- W3 파일 소유: `implementer` = `pyproject.toml`, `config.yaml`, `tests/`, `src/stock_sim/`(단 `render.py` 제외), `output/result.json`. `dashboard-builder` = `templates/`, `src/stock_sim/render.py`, `tests/test_render.py`, `output/dashboard.example.html`. `cli.py`는 implementer만 고치며, architecture.md의 `render()` 시그니처대로 호출한다.
+- W3 파일 소유: `implementer` = `pyproject.toml`, `config.yaml`, `tests/`, `src/stock_sim/`(단 `render.py` 제외), `output/result.json`. `dashboard-builder` = `templates/`, `src/stock_sim/render.py`, `tests/test_render.py`, `output/dashboard.example.html`, `output/dashboard.example.png`(검증용 스크린샷, `output/`은 커밋 제외). `cli.py`는 implementer만 고치며, architecture.md의 `render()` 시그니처대로 호출한다.
 - W3에서 `dashboard-builder`는 `docs/result.example.json`으로 개발하고 `output/dashboard.example.html`로 렌더해 검증한다. 가짜 데이터를 `output/dashboard.html`에 쓰지 않는다. 최종 `dashboard.html`은 두 agent가 끝난 뒤 오케스트레이터가 통합 실행(7절 진입점 명령)으로 실데이터에서 생성한다.
 - 병렬 agent끼리는 서로의 진행을 기다리거나 가정하지 않는다. 계약(`architecture.md`, `result.example.json`)만 믿는다. 계약이 부족하면 "변경 요청"으로 보고한다.
 - 사용자 결정(6.4)이 필요한 agent만 멈추고, 나머지 병렬 작업은 계속 진행한다.
