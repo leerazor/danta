@@ -437,3 +437,10 @@ def test_render_module_is_standalone():
     src = RENDER_PY.read_text(encoding="utf-8")
     assert "import requests" not in src and "print(" not in src
     assert not re.search(r"^\s*(from|import) stock_sim", src, flags=re.MULTILINE)
+
+
+def test_auto_refresh_and_generated_time(example, tmp_path):
+    """열어 둔 대시보드가 재생성된 파일을 다시 읽도록 meta refresh 가 있고, 생성 시각을 분 단위로 보인다."""
+    html = render_dict(example, tmp_path)
+    assert '<meta http-equiv="refresh" content="300">' in html
+    assert "생성 " + example["meta"]["generated_at"][:16].replace("T", " ") in html

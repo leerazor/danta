@@ -640,8 +640,11 @@ KIS DEV(모의투자) 도메인에서 <API 이름> 조회에 실패했습니다 
 | 캐시 무시 재수집 | `uv run --directory src python -m stock_sim run --config ../config.yaml --refresh` | 같음 |
 | HTML만 다시 | `uv run --directory src python -m stock_sim render --config ../config.yaml` | `output/dashboard.html` |
 | 예시 렌더(W3, dashboard-builder) | `uv run --with jinja2 python src/stock_sim/render.py --result docs/result.example.json --template templates/dashboard.html.j2 --out output/dashboard.example.html` | `output/dashboard.example.html` |
+| 자동 갱신 등록 | `powershell -ExecutionPolicy Bypass -File scripts\register_schedule.ps1` (`-Unregister`로 해제) | 작업 스케줄러 `stock-sim-dashboard`(화~토 07:30), `data/logs/scheduled_run.log` |
 | 테스트 | `uv run pytest` | – |
 | 실 API 스모크 | `uv run pytest -m network` | – |
+
+- 자동 갱신: `backtest.end: auto`(어제까지)로 구간이 매일 굴러가고, 스케줄러가 전체 실행으로 HTML을 다시 만든다. 템플릿의 `<meta http-equiv="refresh" content="300">`가 열린 탭을 5분마다 다시 읽게 한다(JS·서버 불필요, `file://` 그대로). 헤더 "생성"은 `meta.generated_at`을 분 단위로 보인다.
 
 - `output/dashboard.html`에는 실데이터 결과만 쓴다. 예시 데이터는 `output/dashboard.example.html`에만 쓴다(CLAUDE.md 6.6절).
 - (개정 1.1, CLAUDE.md 7절) 패키지를 설치하지 않는 구성이다: `pyproject.toml`에 `[tool.uv] package = false`. 한글 경로에서 Python 3.11이 편집 가능 설치의 `.pth`를 읽지 못하기 때문이다. 그래서 진입점은 `--directory src`로 `src/`에서 `python -m stock_sim`을 실행하고, `--config`는 `src/` 기준 상대 경로 `../config.yaml`로 준다. `config.yaml` 안의 상대 경로(`output/…`, `data/cache` 등)는 종전대로 config 파일 폴더(`stock-sim/`) 기준이라 산출물 위치는 바뀌지 않는다.
