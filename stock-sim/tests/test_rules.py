@@ -31,13 +31,17 @@ def test_requests_is_imported_only_in_kis_client():
         assert not net_libs.search(text), f"{path.name}: 다른 네트워크 라이브러리 사용 금지"
 
 
-def test_client_has_only_token_and_two_quote_paths():
+def test_client_has_only_token_and_three_quote_paths():
     text = (SRC / "kis_client.py").read_text(encoding="utf-8")
     paths = set(re.findall(r'"(/(?:uapi|oauth2)/[^"]+)"', text))
     assert paths == {"/oauth2/tokenP",
                      "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
-                     "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"}
+                     "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
+                     "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"}
     assert all("/quotations/" in p for p in paths if p.startswith("/uapi/"))
+    from stock_sim.kis_client import KisClient
+    public = {n for n in dir(KisClient) if not n.startswith("_")}
+    assert public == {"get_token", "daily_prices", "index_daily", "minute_prices"}   # call_count는 인스턴스 속성
 
 
 def test_no_env_switching_or_secret_printing_in_src():

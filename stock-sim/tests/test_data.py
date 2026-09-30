@@ -1,246 +1,220 @@
-"""정규화·구간 분할·캐시 테스트. 네트워크 없음(가짜 클라이언트)."""
+"""data.py: 분봉 정규화·페이지네이션·캐시 규칙(architecture.md 1.3절, 4.2절, 6.2절). 네트워크 없음."""
+import copy
+import json
+import shutil
 from datetime import date
 
 import pandas as pd
 import pytest
 
-from helpers import FIXTURES, HAND_END, HAND_START, hand_prices, make_df
-from stock_sim import data
+from helpers import FIX_CACHE, FIXTURES
+from stock_sim import config, data
+from stock_sim.kis_client import KisUnsupportedError
+
+DAY = date(2026, 9, 22)
+PREV = date(2026, 9, 21)
+
+
+def _row(d, h, o=100, hi=101, lo=99, c=100, v=10):
+    return {"stck_bsop_date": d, "stck_cntg_hour": h, "stck_oprc": str(o), "stck_hgpr": str(hi),
+            "stck_lwpr": str(lo), "stck_prpr": str(c), "cntg_vol": str(v), "acml_tr_pbmn": "0"}
+
+
+def _pages():
+    return [json.loads((FIXTURES / f"minute_page_{i}.json").read_text(encoding="utf-8")) for i in range(1, 5)]
+
+
+class PageClient:
+    """가짜 KIS 클라이언트: 요청 시각 이하 행을 내림차순 120건씩 준다(전 거래일 행으로 채움)."""
+
+    env = "DEV"
+
+    def __init__(self, rows_by_day: dict[str, list[dict]] | None = None, pages: list | None = None):
+        self.rows_by_day = rows_by_day or {}
+        self.pages = list(pages or [])
+        self.calls: list[tuple[str, date, str]] = []
+        self.call_count = 0
+
+    def minute_prices(self, code, day, hour):
+        self.calls.append((code, day, hour))
+        self.call_count += 1
+        if self.pages:
+            return self.pages.pop(0)
+        want = f"{day:%Y%m%d}"
+        rows = [r for r in self.rows_by_day.get(want, []) if r["stck_cntg_hour"] <= hour]
+        rows.sort(key=lambda r: r["stck_cntg_hour"], reverse=True)
+        out = rows[:120]
+        for d in sorted((k for k in self.rows_by_day if k < want), reverse=True):
+            if len(out) >= 120:
+                break
+            out += sorted(self.rows_by_day[d], key=lambda r: r["stck_cntg_hour"], reverse=True)[:120 - len(out)]
+        return out
 
 
 class ExplodingClient:
-    """호출되면 실패하는 가짜 객체: 캐시 적중 시 클라이언트를 부르지 않음을 증명한다."""
+    env = "DEV"
     call_count = 0
 
-    def daily_prices(self, *a, **k):
-        raise AssertionError("캐시가 있는데 API를 호출했습니다")
+    def minute_prices(self, *a, **k):
+        raise AssertionError("캐시 적중인데 API를 호출했습니다")
 
-    index_daily = daily_prices
-
-
-class FakeClient:
-    def __init__(self, stock_rows=None, index_rows=None):
-        self.stock_rows, self.index_rows = stock_rows or [], index_rows or []
-        self.calls, self.call_count = [], 0
-
-    def daily_prices(self, code, start, end):
-        self.calls.append(("stock", code, start, end))
-        self.call_count += 1
-        return list(self.stock_rows)
-
-    def index_daily(self, code, start, end):
-        self.calls.append(("index", code, start, end))
-        self.call_count += 1
-        lo, hi = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
-        return [r for r in self.index_rows if lo <= r["stck_bsop_date"] <= hi]
+    daily_prices = index_daily = minute_prices
 
 
-def _stock_row(day, o, h, l, c, vol="1000", val="50000000"):
-    return {"stck_bsop_date": day, "stck_oprc": o, "stck_hgpr": h, "stck_lwpr": l,
-            "stck_clpr": c, "acml_vol": vol, "acml_tr_pbmn": val, "mod_yn": "N"}
+# ---- normalize_minute_rows / next_page_hour ------------------------------------------
+def test_normalize_filters_other_days_sorts_dedups_and_casts():
+    rows = [_row("20260922", "090200", c=103), _row("20260921", "153000", c=1),
+            _row("20260922", "090000", c=101), _row("20260922", "090000", c=102),
+            _row("20260922", "0901", c=9), _row("20260922", "090100", o="100.5", c=104)]
+    df = data.normalize_minute_rows(rows, DAY)
+    assert list(df.columns) == data.MINUTE_COLUMNS
+    assert list(df["time"]) == ["09:00", "09:01", "09:02"]
+    assert list(df["close"]) == [102, 104, 103]                 # 같은 키는 마지막 것
+    assert df["open"].iloc[1] == 101 and df.attrs["non_integer_price"] is True   # 100.5 → 101 (half-up)
+    assert str(df["date"].dtype).startswith("datetime64") and (df["date"] == pd.Timestamp(DAY)).all()
+    assert df["volume"].dtype == "int64"
 
 
-def test_normalize_stock_rows_strings_desc_blank_duplicates():
-    rows = [
-        _stock_row("20260903", "71000", "72000", "70500", "71500"),
-        _stock_row("20260902", "70000", "71000", "69000", "70500"),
-        _stock_row("", "0", "0", "0", "0"),                      # 빈 날짜 → 버림
-        _stock_row("2026xx01", "1", "1", "1", "1"),              # 파싱 실패 → 버림
-        _stock_row("20260901", "69000", "70000", "68000", "69500"),
-        _stock_row("20260902", "70001", "71001", "69001", "70501"),   # 중복 → 마지막 것
-    ]
-    df = data.normalize_stock_rows(rows)
-    assert list(df.columns) == data.COLUMNS
-    assert list(df["date"].dt.strftime("%Y-%m-%d")) == ["2026-09-01", "2026-09-02", "2026-09-03"]
-    assert list(df["close"]) == [69500, 70501, 71500]
-    assert str(df["date"].dtype).startswith("datetime64")
-    for col in ("open", "high", "low", "close", "volume", "value"):
-        assert df[col].dtype == "int64"
-    assert list(df.index) == [0, 1, 2]
-    assert df.attrs["non_integer_price"] is False
+def test_normalize_end_label_shifts_one_minute_and_empty():
+    df = data.normalize_minute_rows([_row("20260922", "090100"), _row("20260922", "153000")], DAY, "end")
+    assert list(df["time"]) == ["09:00", "15:29"]
+    empty = data.normalize_minute_rows([_row("20260921", "090000")], DAY)
+    assert len(empty) == 0 and list(empty.columns) == data.MINUTE_COLUMNS
 
 
-def test_normalize_stock_non_integer_price_rounds_half_up():
-    df = data.normalize_stock_rows([_stock_row("20260901", "100.5", "101.4", "99.5", "100.49")])
-    assert (df["open"].iloc[0], df["high"].iloc[0], df["low"].iloc[0], df["close"].iloc[0]) == (101, 101, 100, 100)
-    assert df.attrs["non_integer_price"] is True
+def test_next_page_hour():
+    rows = [_row("20260922", "131900"), _row("20260922", "140000"), _row("20260921", "100000")]
+    assert data.next_page_hour(rows, DAY) == "131800"
+    assert data.next_page_hour([_row("20260922", "090000")], DAY) == "085900"
+    assert data.next_page_hour([_row("20260921", "100000")], DAY) is None
+    assert data.next_page_hour([], DAY) is None
 
 
-def test_normalize_empty_and_index_rows():
-    assert len(data.normalize_stock_rows([])) == 0
-    rows = [{"stck_bsop_date": "20260902", "bstp_nmix_oprc": "4025.10", "bstp_nmix_hgpr": "4040.00",
-             "bstp_nmix_lwpr": "4020.00", "bstp_nmix_prpr": "4039.55", "acml_vol": "500000",
-             "acml_tr_pbmn": "9000000"},
-            {"stck_bsop_date": "20260901", "bstp_nmix_oprc": "", "bstp_nmix_hgpr": "4030.00",
-             "bstp_nmix_lwpr": "4000.00", "bstp_nmix_prpr": "4020.12", "acml_vol": "400000",
-             "acml_tr_pbmn": "8000000"}]
-    df = data.normalize_index_rows(rows)
-    assert list(df["close"]) == [4020.12, 4039.55]
-    assert df["close"].dtype == "float64" and df["volume"].dtype == "int64"
-    assert pd.isna(df["open"].iloc[0])                    # 지수 시가 없음은 그대로 둔다
+# ---- fetch_minutes_day -------------------------------------------------------------
+def test_fetch_with_fixture_pages_stops_at_0900_and_drops_previous_day():
+    client = PageClient(pages=_pages())
+    rows, truncated = data.fetch_minutes_day(client, "000001", DAY)
+    assert truncated is False
+    assert [c[2] for c in client.calls] == ["160000", "131800", "111500", "091200"]
+    assert {r["stck_bsop_date"] for r in rows} == {"20260922"}
+    expected = pd.read_csv(FIX_CACHE / "min" / "000001_20260922.csv", encoding="utf-8")
+    assert len(rows) == len(expected)
+    df = data.normalize_minute_rows(rows, DAY)
+    assert list(df["time"]) == list(expected["time"])
 
 
-def test_split_ranges():
-    s, e = date(2026, 5, 31), date(2026, 9, 29)
-    assert data.split_ranges(s, e, 130) == [(s, e)]
-    parts = data.split_ranges(s, e, 60)
-    assert parts == [(date(2026, 5, 31), date(2026, 7, 29)), (date(2026, 7, 30), date(2026, 9, 27)),
-                     (date(2026, 9, 28), date(2026, 9, 29))]
-    assert data.split_ranges(s, s, 60) == [(s, s)]
-    assert data.split_ranges(e, s, 60) == []
-    with pytest.raises(ValueError):
-        data.split_ranges(s, e, 0)
+def _day_rows(n_minutes: int, d="20260922", start=9 * 60):
+    return [_row(d, f"{(start + i) // 60:02d}{(start + i) % 60:02d}00") for i in range(n_minutes)]
 
 
-def test_cache_path_names():
-    p = data.cache_path(FIXTURES, "005930", date(2026, 5, 31), date(2026, 9, 29))
-    assert p.name == "005930_20260531_20260929.csv"
-    q = data.cache_path(FIXTURES, data.index_cache_code("0001"), date(2026, 5, 31), date(2026, 9, 29))
-    assert q.name == "IDX0001_20260531_20260929.csv"
+def test_fetch_stop_conditions():
+    # ③ 응답 < 120건
+    c = PageClient({"20260922": _day_rows(50, start=10 * 60)})
+    rows, tr = data.fetch_minutes_day(c, "X", DAY)
+    assert (len(rows), tr, len(c.calls)) == (50, False, 1)
+    # ① 요청일 행 0건(휴장일): 전 거래일 행만 온다
+    c = PageClient({"20260921": _day_rows(200, d="20260921")})
+    rows, tr = data.fetch_minutes_day(c, "X", DAY)
+    assert (rows, tr, len(c.calls)) == ([], False, 1)
+    # ④ 새 행 없음: 같은 페이지가 반복된다
+    page = _day_rows(120, start=10 * 60)
+    c = PageClient(pages=[page, page, page])
+    rows, tr = data.fetch_minutes_day(c, "X", DAY)
+    assert (len(rows), tr, len(c.calls)) == (120, False, 2)
+    # ② 가장 이른 시각 ≤ 090000 (행 120건이어도 종료)
+    c = PageClient(pages=[_day_rows(120, start=9 * 60)])
+    rows, tr = data.fetch_minutes_day(c, "X", DAY)
+    assert (len(rows), tr, len(c.calls)) == (120, False, 1)
 
 
-def test_cache_hit_never_calls_client():
-    df = data.load_daily("AAA", HAND_START, HAND_END, FIXTURES, ExplodingClient())
-    assert len(df) == 7 and df.attrs["from_cache"] is True
-    assert list(df["date"]) == sorted(df["date"])
-    idx = data.load_index("0001", HAND_START, HAND_END, FIXTURES, ExplodingClient())
-    assert len(idx) == 5 and idx["close"].dtype == "float64"
+def test_fetch_truncated_at_max_pages():
+    c = PageClient({"20260922": _day_rows(400, start=9 * 60)})
+    rows, tr = data.fetch_minutes_day(c, "X", DAY, start_hour="160000", max_pages=2)
+    assert tr is True and len(c.calls) == 2 and len(rows) == 240
 
 
-def test_cache_miss_without_client_raises(tmp_path):
+# ---- load_minutes / 캐시 -------------------------------------------------------------
+def test_cache_hit_does_not_call_client(tmp_path):
+    shutil.copytree(FIX_CACHE, tmp_path / "cache")
+    df, issues, st = data.load_minutes("000001", [PREV, DAY], tmp_path / "cache", ExplodingClient())
+    assert st["cache_hits"] == 2 and st["api_calls"] == 0 and issues == []
+    assert df["date"].nunique() == 2 and df["time"].iloc[0] == "09:00"
+
+
+def test_fetch_writes_cache_and_empty_marker(tmp_path):
+    rows = {"20260922": _day_rows(60, start=14 * 60)}
+    c = PageClient(rows)
+    df, issues, st = data.load_minutes("000009", [PREV, DAY], tmp_path, c)
+    assert st["fetched_days"] == 2 and st["empty_days"] == [PREV] and len(df) == 60
+    marker = data.minute_cache_path(tmp_path, "000009", PREV)
+    assert marker.read_text(encoding="utf-8").strip() == ",".join(data.MINUTE_COLUMNS)   # 헤더만
+    cached = data.read_minute_cache(marker)
+    assert cached is not None and len(cached) == 0                                      # 0행도 적중
+    df2, _, st2 = data.load_minutes("000009", [PREV, DAY], tmp_path, ExplodingClient())
+    assert st2["cache_hits"] == 2 and len(df2) == 60
+
+
+def test_all_empty_responses_raise_and_write_no_marker(tmp_path):
+    c = PageClient({})
+    with pytest.raises(KisUnsupportedError) as exc:
+        data.load_minutes("000009", [PREV, DAY], tmp_path, c)
+    assert "자동으로 PROD로 전환하지 않습니다" in str(exc.value)
+    assert not (tmp_path / "min").exists() or not list((tmp_path / "min").glob("*.csv"))
+
+
+def test_truncated_day_is_not_cached(tmp_path):
+    c = PageClient({"20260922": _day_rows(400, start=9 * 60)})
+    df, issues, st = data.load_minutes("000009", [DAY], tmp_path, c, max_pages=2)
+    assert [i["code"] for i in issues] == ["TRUNCATION_SUSPECT"]
+    assert len(df) == 240 and not data.minute_cache_path(tmp_path, "000009", DAY).exists()
+
+
+def test_minute_files_are_never_deleted(tmp_path):
+    shutil.copytree(FIX_CACHE, tmp_path / "cache")
+    before = sorted(p.name for p in (tmp_path / "cache" / "min").iterdir())
+    broken = tmp_path / "cache" / "min" / "000001_20260923.csv"
+    broken.write_text("garbage\n", encoding="utf-8")                         # 깨진 파일은 미적중 → 다시 받는다
+    rows = {"20260923": _day_rows(100, d="20260923", start=13 * 60)}
+    data.load_minutes("000001", [PREV, DAY, date(2026, 9, 23)], tmp_path / "cache", PageClient(rows))
+    after = sorted(p.name for p in (tmp_path / "cache" / "min").iterdir())
+    assert before == after
+
+
+def test_no_client_and_no_cache_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        data.load_daily("AAA", HAND_START, HAND_END, tmp_path, None)
+        data.load_minutes("000001", [DAY], tmp_path, None)
 
 
-def test_fetch_then_cache_then_no_second_call(tmp_path):
-    rows = [_stock_row("20260918", "50500", "51000", "50500", "51000"),
-            _stock_row("20260917", "50000", "50000", "50000", "50000"),
-            _stock_row("20260801", "1", "1", "1", "1")]              # 요청 구간 밖 → 버림
-    client = FakeClient(stock_rows=rows)
-    df = data.load_daily("123456", HAND_START, HAND_END, tmp_path, client)
-    assert client.call_count == 1 and df.attrs["from_cache"] is False
-    assert list(df["close"]) == [50000, 51000]
-    path = data.cache_path(tmp_path, "123456", HAND_START, HAND_END)
-    text = path.read_text(encoding="utf-8").splitlines()
-    assert text[0] == "date,open,high,low,close,volume,value" and text[1].startswith("2026-09-17,")
-    again = data.load_daily("123456", HAND_START, HAND_END, tmp_path, ExplodingClient())
-    assert list(again["close"]) == [50000, 51000] and again["close"].dtype == "int64"
-    data.load_daily("123456", HAND_START, HAND_END, tmp_path, client, refresh=True)
-    assert client.call_count == 2                                    # --refresh는 캐시를 무시
+# ---- load_all / trading_days -------------------------------------------------------------
+def _fixture_cfg(tmp_path):
+    shutil.copytree(FIX_CACHE, tmp_path / "cache")
+    cfg = copy.deepcopy(config.DEFAULTS)
+    cfg["universe"] = [{"code": "000001", "name": "가상전자"}, {"code": "000002", "name": "가상화학"}]
+    cfg["backtest"] = {"end": "2026-09-23", "days": 3, "initial_cash": 100_000_000}
+    cfg["paths"] = {"cache_dir": tmp_path / "cache"}
+    return cfg
 
 
-def test_empty_response_is_not_cached_and_broken_cache_is_a_miss(tmp_path):
-    client = FakeClient()
-    df = data.load_daily("123456", HAND_START, HAND_END, tmp_path, client)
-    path = data.cache_path(tmp_path, "123456", HAND_START, HAND_END)
-    assert len(df) == 0 and not path.exists()
-    path.write_text("date,open\n", encoding="utf-8")
-    assert data.read_cache(path, True) is None
-    path.write_text("", encoding="utf-8")
-    assert data.read_cache(path, True) is None
+def test_load_all_from_fixture_cache_offline(tmp_path):
+    cfg = _fixture_cfg(tmp_path)
+    period = config.resolve_period(cfg, date(2026, 9, 24))
+    assert period == {"start": date(2026, 9, 21), "end": date(2026, 9, 23),
+                      "daily_fetch_start": date(2026, 9, 14)}
+    minutes, daily, bench, issues, source = data.load_all(cfg, period, None)
+    assert sorted(minutes) == ["000001", "000002"] and issues == []
+    assert source["minute_files"] == 6 and source["api_calls"] == 0 and source["empty_days"] == []
+    assert source["cache_hits"] == 3 + 6
+    assert data.trading_days(daily, period["start"], period["end"]) == \
+        [date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23)]
+    assert len(bench) == 8
 
 
-def test_index_is_fetched_in_chunks_and_merged(tmp_path):
-    days = pd.bdate_range("2026-06-01", "2026-09-29")
-    rows = [{"stck_bsop_date": d.strftime("%Y%m%d"), "bstp_nmix_oprc": "4000.0",
-             "bstp_nmix_hgpr": "4010.0", "bstp_nmix_lwpr": "3990.0", "bstp_nmix_prpr": f"{4000 + i}.5",
-             "acml_vol": "1", "acml_tr_pbmn": "1"} for i, d in enumerate(days)][::-1]
-    client = FakeClient(index_rows=rows)
-    df = data.load_index("0001", date(2026, 5, 31), date(2026, 9, 29), tmp_path, client)
-    assert client.call_count == 3                        # 60일 단위 3조각
-    assert len(df) == len(days) and df["date"].is_monotonic_increasing and df["date"].is_unique
-    assert df.attrs["truncation"] is False
-    assert data.cache_path(tmp_path, "IDX0001", date(2026, 5, 31), date(2026, 9, 29)).exists()
-
-
-def test_truncation_suspect_when_row_limit_hit(tmp_path):
-    days = pd.bdate_range("2026-01-01", periods=100)
-    rows = [_stock_row(d.strftime("%Y%m%d"), "10", "10", "10", "10") for d in days]
-    df = data.load_daily("123456", date(2026, 1, 1), date(2026, 5, 10), tmp_path, FakeClient(stock_rows=rows))
-    assert df.attrs["truncation"] is True
-
-
-def test_truncated_data_is_not_cached_so_issue_survives_rerun(tmp_path):
-    """phase3-1 Med 2: 잘림 의심 조각은 캐시에 쓰지 않는다 → 재실행에서 다시 받고 다시 경고한다."""
-    start, end = date(2026, 1, 1), date(2026, 5, 10)
-    days = pd.bdate_range("2026-01-01", periods=100)
-    rows = [_stock_row(d.strftime("%Y%m%d"), "10", "10", "10", "10") for d in days]
-    path = data.cache_path(tmp_path, "123456", start, end)
-    path.write_text("date,open,high,low,close,volume,value\n2026-01-02,1,1,1,1,1,1\n", encoding="utf-8")
-    client = FakeClient(stock_rows=rows)
-    first = data.load_daily("123456", start, end, tmp_path, client, refresh=True)
-    assert first.attrs["truncation"] is True and len(first) > 0
-    assert not path.exists()                                   # 예전 캐시도 남기지 않는다
-    with pytest.raises(FileNotFoundError):                     # 캐시가 없으니 오프라인 재실행은 불가
-        data.load_daily("123456", start, end, tmp_path, None)
-    again = data.load_daily("123456", start, end, tmp_path, client)
-    assert client.call_count == 2 and again.attrs["truncation"] is True
-
-
-def test_non_integer_price_issue_survives_cache_reload(tmp_path):
-    """phase3-1 Med 2: 수집 → 캐시 재로드 후에도 NON_INTEGER_PRICE 가 유지된다(보조 파일)."""
-    rows = [_stock_row("20260918", "50500.5", "51000", "50500", "51000"),
-            _stock_row("20260917", "50000", "50000", "50000", "50000")]
-    first = data.load_daily("123456", HAND_START, HAND_END, tmp_path, FakeClient(stock_rows=rows))
-    assert first.attrs["non_integer_price"] is True and first.attrs["from_cache"] is False
-    path = data.cache_path(tmp_path, "123456", HAND_START, HAND_END)
-    side = data.issues_path(path)
-    assert side.name == "123456_20260917_20260929.issues.json" and side.exists()
-    assert path.read_text(encoding="utf-8").splitlines()[0] == "date,open,high,low,close,volume,value"
-    again = data.load_daily("123456", HAND_START, HAND_END, tmp_path, ExplodingClient())
-    assert again.attrs["from_cache"] is True and again.attrs["non_integer_price"] is True
-    assert list(again["open"]) == [50000, 50501]
-    # 정수 가격으로 다시 받으면 예전 보조 파일은 지워진다
-    clean = [_stock_row("20260918", "50500", "51000", "50500", "51000")]
-    data.load_daily("123456", HAND_START, HAND_END, tmp_path, FakeClient(stock_rows=clean), refresh=True)
-    assert not side.exists()
-    assert data.load_daily("123456", HAND_START, HAND_END, tmp_path, None).attrs["non_integer_price"] is False
-
-
-def test_load_all_keeps_data_issues_after_cache_reload(tmp_path):
-    """load_all 수준: 첫 수집과 캐시 재실행의 data_issues 가 같다."""
-    start, end = HAND_START, HAND_END
-    rows = [_stock_row("20260918", "50500.5", "51000", "50500", "51000"),
-            _stock_row("20260917", "50000", "50000", "50000", "50000")]
-    idx = [{"stck_bsop_date": d, "bstp_nmix_oprc": "4000", "bstp_nmix_hgpr": "4000",
-            "bstp_nmix_lwpr": "4000", "bstp_nmix_prpr": "4000", "acml_vol": "1", "acml_tr_pbmn": "1"}
-           for d in ("20260917", "20260918")]
-    cfg = {"paths": {"cache_dir": tmp_path}, "kis": {"env": "DEV"},
-           "universe": [{"code": "123456", "name": "가상"}], "benchmark": {"code": "0001"}}
-    period = {"fetch_start": start, "end": end}
-    _, _, first, src1 = data.load_all(cfg, period, FakeClient(stock_rows=rows, index_rows=idx))
-    _, _, second, src2 = data.load_all(cfg, period, None)
-    codes = sorted((i["code"], i["stock"]) for i in first)
-    assert ("NON_INTEGER_PRICE", "123456") in codes
-    assert codes == sorted((i["code"], i["stock"]) for i in second)
-    assert src1["cache_hits"] == 0 and src2 == {"api_calls": 0, "cache_hits": 2}
-
-
-def test_data_module_does_not_import_numpy():
-    """phase3-1 Low 3: numpy 는 의존성 목록에 없으므로 직접 import 하지 않는다."""
-    text = (FIXTURES.parent.parent / "src" / "stock_sim" / "data.py").read_text(encoding="utf-8")
-    assert "import numpy" not in text and "np." not in text
-
-
-def test_build_calendar_is_sorted_union():
-    prices = hand_prices()
-    prices["BBB"] = prices["BBB"].iloc[1:]
-    cal = data.build_calendar(prices)
-    assert cal[0] == date(2026, 9, 17) and cal[-1] == date(2026, 9, 29) and len(cal) == 7
-    assert cal == sorted(cal) and date(2026, 9, 24) not in cal
-
-
-def test_check_data_missing_excluded_and_anomaly():
-    prices = hand_prices()
-    prices["BBB"] = prices["BBB"][prices["BBB"]["date"] != pd.Timestamp("2026-09-22")]
-    prices["CCC"] = prices["AAA"].iloc[0:0]
-    prices["DDD"] = make_df([(date(2026, 9, 17), 100, 100, 5), (date(2026, 9, 18), 100, 140, 5)])
-    cal = data.build_calendar(prices)
-    issues = data.check_data(prices, cal)
-    by = {(i["code"], i["stock"]): i for i in issues}
-    assert ("DATA_MISSING", "AAA") not in by
-    assert by[("DATA_MISSING", "BBB")]["value"] == 1 and by[("DATA_MISSING", "BBB")]["excluded"] is False
-    assert by[("DATA_MISSING", "CCC")]["excluded"] is True and by[("DATA_MISSING", "CCC")]["value"] == 7
-    anomaly = by[("PRICE_ANOMALY", "DDD")]
-    assert anomaly["date"] == date(2026, 9, 18) and anomaly["value"] == pytest.approx(0.4)
-    assert set(issues[0]) == {"code", "stock", "date", "value", "excluded", "side", "extra"}
+def test_load_all_excludes_code_without_minutes(tmp_path):
+    cfg = _fixture_cfg(tmp_path)
+    for f in (tmp_path / "cache" / "min").glob("000002_*.csv"):
+        f.write_text(",".join(data.MINUTE_COLUMNS) + "\n", encoding="utf-8")
+    period = config.resolve_period(cfg, date(2026, 9, 24))
+    minutes, _, _, issues, source = data.load_all(cfg, period, None)
+    assert list(minutes) == ["000001"]
+    assert [(i["code"], i["stock"], i["excluded"]) for i in issues] == [("DATA_MISSING", "000002", True)]
+    assert len(source["empty_days"]) == 3

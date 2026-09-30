@@ -1,91 +1,147 @@
-"""신호(목표 종목) 계산. 순수 함수만 둔다(파일·네트워크·시계 접근 없음).
+"""5분봉 채널 돌파(intraday_breakout). 순수 함수(파일·네트워크·시계 접근 없음).
 
-규칙은 docs/strategy.md 2.4절·3절. 신호는 signal_date 종가까지만 쓴다(R5).
+규칙은 docs/strategy.md 3.4·3.5절(리샘플), 4.1절(지표), 4.2·4.3절(신호 플래그).
+신호 플래그는 봉 k의 종가까지 정보만 쓴다(R5). 포지션·쿨다운·횟수·중단 같은 상태 조건은
+넣지 않는다(backtest가 본다). 비교는 정수·유리수(Fraction)로 해 부동소수 오차를 피한다.
 """
 from __future__ import annotations
 
 from datetime import date
+from fractions import Fraction
 
 import pandas as pd
 
-TARGET_COLUMNS = ["signal_date", "fill_date", "code", "rank", "score"]
+BAR_COLUMNS = ["date", "time", "slot", "k", "open", "high", "low", "close", "volume"]
+INDICATOR_COLUMNS = ["hh", "ll", "sv", "xl", "pv", "cv"]
+FLAG_COLUMNS = ["breakout", "cutoff_ok", "range_ok", "volume_ok", "vwap_ok", "exit_signal"]
 
 
-def to_bars(df: pd.DataFrame) -> dict[date, tuple[int, int, int]]:
-    """일봉 DataFrame → {날짜: (시가, 종가, 거래량)}."""
-    if df is None or len(df) == 0:
-        return {}
-    dates = [ts.date() for ts in pd.to_datetime(df["date"])]
-    return {
-        d: (int(o), int(c), int(v))
-        for d, o, c, v in zip(dates, df["open"], df["close"], df["volume"])
-    }
+def to_minutes(hhmm: str) -> int:
+    """'HH:MM' → 자정부터 분."""
+    return int(hhmm[:2]) * 60 + int(hhmm[3:5])
 
 
-def is_valid_bar(bar: tuple[int, int, int] | None) -> bool:
-    """유효 봉: 행이 있고 시가 > 0, 종가 > 0, 거래량 > 0."""
-    return bar is not None and bar[0] > 0 and bar[1] > 0 and bar[2] > 0
+def hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
-def _iso_week(d: date) -> tuple[int, int]:
-    iso = d.isocalendar()
-    return (iso[0], iso[1])
+def slot_count(session_open: str, continuous_end: str, bar_minutes: int) -> int:
+    """접속매매 구간의 슬롯 수(5분봉 09:00~15:20이면 76)."""
+    span = to_minutes(continuous_end) - to_minutes(session_open)
+    return max(0, -(-span // bar_minutes))
 
 
-def rebalance_schedule(calendar: list[date], start: date, end: date, params: dict
-                       ) -> list[tuple[date, date]]:
-    """[(signal_date, fill_date)]. fill_date는 [start, end] 안의 각 ISO 주 첫 거래일."""
-    mode = params.get("rebalance", "weekly")
-    if mode != "weekly":
-        raise ValueError(f"지원하지 않는 rebalance 값: {mode}")
-    out: list[tuple[date, date]] = []
-    for i in range(1, len(calendar)):
-        p, d = calendar[i - 1], calendar[i]
-        if start <= d <= end and _iso_week(p) != _iso_week(d):
-            out.append((p, d))
+def _as_date(x) -> date:
+    """Timestamp·datetime → date. date는 그대로."""
+    return x.date() if isinstance(x, pd.Timestamp) else x
+
+
+def resample_bars(minutes: pd.DataFrame, bar_minutes: int = 5,
+                  session_open: str = "09:00", continuous_end: str = "15:20") -> pd.DataFrame:
+    """1분봉(4.2절, 여러 날) → 유효 5분봉(4.3절 앞 9개 컬럼).
+
+    슬롯 s는 1분봉 s ~ s + bar_minutes − 1분을 묶는다. continuous_end 이후 1분봉은 버린다.
+    유효 봉 = 1분봉이 하나 이상 있고 open > 0, close > 0, volume > 0. 무효 슬롯은 행이 없다.
+    """
+    if minutes is None or len(minutes) == 0:
+        return pd.DataFrame(columns=BAR_COLUMNS)
+    open_m, end_m = to_minutes(session_open), to_minutes(continuous_end)
+    df = minutes[["date", "time", "open", "high", "low", "close", "volume"]].copy()
+    df["d"] = [_as_date(x) for x in pd.to_datetime(pd.Series(df["date"]))]
+    df["m"] = [to_minutes(str(t)) for t in df["time"]]
+    df = df[(df["m"] >= open_m) & (df["m"] < end_m)]
+    df = df.sort_values(["d", "m"], kind="stable")
+    df["slot"] = (df["m"] - open_m) // bar_minutes
+    rows = []
+    for (d, slot), g in df.groupby(["d", "slot"], sort=True):
+        o, c, v = int(g["open"].iloc[0]), int(g["close"].iloc[-1]), int(g["volume"].sum())
+        if o <= 0 or c <= 0 or v <= 0:
+            continue
+        rows.append({"date": d, "time": hhmm(open_m + int(slot) * bar_minutes), "slot": int(slot),
+                     "open": o, "high": int(g["high"].max()), "low": int(g["low"].min()),
+                     "close": c, "volume": v})
+    out = pd.DataFrame(rows, columns=[c for c in BAR_COLUMNS if c != "k"])
+    out["k"] = out.groupby("date").cumcount() if len(out) else pd.Series(dtype="int64")
+    return out[BAR_COLUMNS].reset_index(drop=True)
+
+
+def add_indicators(bars: pd.DataFrame, entry_lookback: int, exit_lookback: int) -> pd.DataFrame:
+    """날짜별로 초기화한 당일 지표(4.1절). hh·ll·sv·xl은 직전 봉(자기 제외), pv·cv는 자기 포함 누적."""
+    out = bars.copy().reset_index(drop=True)
+    if len(out) == 0:
+        for col in INDICATOR_COLUMNS:
+            out[col] = pd.Series(dtype="Int64")
+        return out
+    n, m = int(entry_lookback), int(exit_lookback)
+    g = out.groupby("date", sort=False)
+    prev_h, prev_l, prev_v = g["high"].shift(1), g["low"].shift(1), g["volume"].shift(1)
+    key = out["date"]
+    out["hh"] = prev_h.groupby(key).rolling(n, min_periods=n).max().reset_index(level=0, drop=True)
+    out["ll"] = prev_l.groupby(key).rolling(n, min_periods=n).min().reset_index(level=0, drop=True)
+    out["sv"] = prev_v.groupby(key).rolling(n, min_periods=n).sum().reset_index(level=0, drop=True)
+    out["xl"] = prev_l.groupby(key).rolling(m, min_periods=m).min().reset_index(level=0, drop=True)
+    for col in ("hh", "ll", "sv", "xl"):
+        out[col] = out[col].round().astype("Int64")
+    tp_v = (out["high"] + out["low"] + out["close"]).astype("int64") * out["volume"].astype("int64")
+    out["pv"] = tp_v.groupby(key).cumsum().astype("int64")
+    out["cv"] = out["volume"].astype("int64").groupby(key).cumsum().astype("int64")
     return out
 
 
-def signals(prices: dict[str, pd.DataFrame], calendar: list[date],
-            schedule: list[tuple[date, date]], params: dict) -> pd.DataFrame:
-    """신호일별 목표 종목 표(순위 포함). signal_date 이후 데이터는 읽지 않는다."""
-    lookback = int(params["lookback_days"])
-    top_n = int(params["top_n"])
-    bars = {code: to_bars(df) for code, df in prices.items()}
-    index = {d: i for i, d in enumerate(calendar)}
-    rows: list[dict] = []
-    for signal_date, fill_date in schedule:
-        i = index.get(signal_date)
-        if i is None or i - lookback < 0:
-            continue
-        base_date = calendar[i - lookback]
-        scored: list[tuple[float, str]] = []
-        for code, by_date in bars.items():
-            now, base = by_date.get(signal_date), by_date.get(base_date)
-            if not (is_valid_bar(now) and is_valid_bar(base)):
-                continue
-            scored.append((now[1] / base[1] - 1.0, code))
-        scored.sort(key=lambda x: (-x[0], x[1]))
-        for rank, (score, code) in enumerate(scored[:top_n], start=1):
-            rows.append({"signal_date": signal_date, "fill_date": fill_date,
-                         "code": code, "rank": rank, "score": score})
-    return pd.DataFrame(rows, columns=TARGET_COLUMNS)
+def _frac(x) -> Fraction:
+    return Fraction(str(x))
 
 
-def _momentum_label(params: dict) -> str:
-    return f"{params['lookback_days']}일 수익률 상위 {params['top_n']}종목 · 주간 리밸런싱"
+def signals(bars: pd.DataFrame, params: dict) -> pd.DataFrame:
+    """지표(없으면 계산) + 봉별 bool 플래그 6개(architecture.md 1.4절).
+
+    breakout: k ≥ N 이고 close > hh / cutoff_ok: 봉 종료 시각 ≤ entry_cutoff /
+    range_ok: (hh − ll) ≥ min_range_pct × close / volume_ok: volume × N ≥ vol_mult × sv /
+    vwap_ok: 3 × close × cv > pv / exit_signal: k ≥ M 이고 close < xl.
+    """
+    n, m = int(params["entry_lookback"]), int(params["exit_lookback"])
+    out = bars if "hh" in bars.columns else add_indicators(bars, n, m)
+    out = out.copy()
+    bar_min = int(params.get("bar_minutes", 5))
+    cutoff = to_minutes(params["entry_cutoff"])
+    rng, vol = _frac(params["min_range_pct"]), _frac(params["vol_mult"])
+    flags = {c: [] for c in FLAG_COLUMNS}
+    for r in out.itertuples(index=False):
+        k, c, v = int(r.k), int(r.close), int(r.volume)
+        defined_n = k >= n and not pd.isna(r.hh)
+        defined_m = k >= m and not pd.isna(r.xl)
+        hh = int(r.hh) if defined_n else None
+        flags["breakout"].append(bool(defined_n and c > hh))
+        flags["cutoff_ok"].append(to_minutes(r.time) + bar_min <= cutoff)
+        if defined_n:
+            span, sv = int(r.hh) - int(r.ll), int(r.sv)
+            flags["range_ok"].append(span * rng.denominator >= rng.numerator * c)
+            flags["volume_ok"].append(v * n * vol.denominator >= vol.numerator * sv)
+        else:
+            flags["range_ok"].append(False)
+            flags["volume_ok"].append(False)
+        flags["vwap_ok"].append(3 * c * int(r.cv) > int(r.pv))
+        flags["exit_signal"].append(bool(defined_m and c < int(r.xl)))
+    for col, vals in flags.items():
+        out[col] = pd.Series(vals, index=out.index, dtype="bool")
+    return out
 
 
-STRATEGIES: dict[str, dict] = {
-    "momentum_topn": {
-        "schedule": rebalance_schedule,
-        "targets": signals,
-        "min_warmup": lambda params: int(params["lookback_days"]) + 10,
-        "label": _momentum_label,
-    },
-}
+def auction_closes(minutes: pd.DataFrame, at: str = "15:30") -> dict[date, int]:
+    """날짜별 at 시각 1분봉의 종가(strategy.md 8절 5번 대체 체결가용). 없는 날은 키 없음."""
+    if minutes is None or len(minutes) == 0:
+        return {}
+    sub = minutes[minutes["time"].astype(str) == at]
+    out: dict[date, int] = {}
+    for d, c in zip(pd.to_datetime(sub["date"]), sub["close"]):
+        if int(c) > 0:
+            out[d.date()] = int(c)
+    return out
 
 
-def min_warmup_days(name: str, params: dict) -> int:
-    """백테스트 시작 전 필요한 거래일 수."""
-    return STRATEGIES[name]["min_warmup"](params)
+def label(params: dict) -> str:
+    """meta.strategy.label. 예 '5분봉 채널 돌파 · 당일 청산'."""
+    return f"{int(params.get('bar_minutes', 5))}분봉 채널 돌파 · 당일 청산"
+
+
+STRATEGIES: dict[str, dict] = {"intraday_breakout": {"signals": signals, "label": label}}

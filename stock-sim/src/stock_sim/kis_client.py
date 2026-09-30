@@ -1,6 +1,6 @@
 """KIS Open API 클라이언트. 이 프로젝트에서 유일한 네트워크 모듈이다.
 
-토큰 발급과 시세 조회 2종(종목 일봉, 업종 일봉)만 있다. 그 외 API의 경로·메서드는 두지 않는다(R2).
+토큰 발급과 시세 조회 3종(종목 일봉, 업종 일봉, 종목 일별 분봉)만 있다. 그 외 API의 경로·메서드는 두지 않는다(R2).
 base URL은 생성자의 env 하나로만 정해지고, 환경을 바꾸는 분기는 없다(R3).
 키·시크릿·토큰은 로그와 예외 메시지에 넣지 않는다(R1).
 """
@@ -23,7 +23,9 @@ BASE_URLS = {
 TOKEN_PATH = "/oauth2/tokenP"
 DAILY_PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
 INDEX_DAILY_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+MINUTE_PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"
 DAILY_PRICE_TR_ID = "FHKST03010100"
+MINUTE_PRICE_TR_ID = "FHKST03010230"
 INDEX_DAILY_TR_ID = "FHKUP03500100"
 RATE_LIMIT_CODE = "EGW00201"
 TOKEN_REJECT_CODES = ("EGW00121", "EGW00123")
@@ -58,7 +60,7 @@ def unsupported_message(env: str, api_name: str, msg_cd: str | None, msg1: str |
         "다음 중 하나를 사용자가 결정해야 합니다:\n"
         " 1) PROD 키로 시세 조회(read-only)만 허용: config.yaml의 kis.env를 PROD로, "
         "kis.prod_approved_by_user를 true로 설정\n"
-        " 2) 대체 데이터 소스 사용(의존성 추가 승인 필요, docs/research/universe.md 참조)"
+        " 2) 분봉 전략 재검토: 과거 30일 1분봉을 주는 무키 대체 소스는 없습니다(docs/research/intraday-data.md 3절)"
     )
 
 
@@ -68,7 +70,7 @@ def _mask(secret: str) -> str:
 
 class KisClient:
     def __init__(self, env: str, app_key: str, app_secret: str, cache_dir: Path,
-                 min_interval_sec: float = 1.0, max_retries: int = 3,
+                 min_interval_sec: float = 0.5, max_retries: int = 3,
                  backoff_sec: float = 2.0, timeout_sec: float = 10.0) -> None:
         if env not in BASE_URLS:
             raise KisError(f"알 수 없는 KIS 환경: {env}")
@@ -262,4 +264,19 @@ class KisClient:
                 self.env, api_name, self._scrub(data.get("msg_cd")), "응답에 일자별 배열이 없습니다"))
         log.info("GET %s tr_id=%s index=%s %s~%s → %d건", INDEX_DAILY_PATH, INDEX_DAILY_TR_ID,
                  index_code, start, end, len(rows))
+        return rows
+
+    def minute_prices(self, code: str, day: date, hour: str) -> list[dict]:
+        """주식일별분봉조회 1회 호출(1페이지, 최대 120건). hour는 "HHMMSS".
+
+        output2 원본 행(문자열 dict)을 그대로 반환한다. 빈 배열이면 []. 정규화·페이지네이션은 data.py.
+        """
+        params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code,
+                  "FID_INPUT_DATE_1": day.strftime("%Y%m%d"), "FID_INPUT_HOUR_1": hour,
+                  "FID_PW_DATA_INCU_YN": "N", "FID_FAKE_TICK_INCU_YN": ""}
+        data = self._get(MINUTE_PRICE_PATH, MINUTE_PRICE_TR_ID, params, "주식일별분봉조회")
+        rows = data.get("output2")
+        rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+        log.info("GET %s tr_id=%s code=%s day=%s hour=%s → %d건", MINUTE_PRICE_PATH,
+                 MINUTE_PRICE_TR_ID, code, day, hour, len(rows))
         return rows

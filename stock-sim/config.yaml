@@ -1,37 +1,45 @@
 kis:
   env: DEV                      # DEV | PROD. base URL을 정하는 유일한 값
   prod_approved_by_user: false  # env가 PROD일 때 true가 아니면 실행 거부(R3). 사용자만 바꾼다
-  min_interval_sec: 1.0         # 호출 간 최소 간격
-  max_retries: 3                # EGW00201 재시도 횟수
+  min_interval_sec: 0.5         # 호출 간 최소 간격(DEV 초당 2건)
+  max_retries: 3
   backoff_sec: 2.0              # 재시도 대기(시도마다 ×1, ×2, ×3)
   timeout_sec: 10
 universe:
   - {code: "005930", name: "삼성전자"}
   - {code: "000660", name: "SK하이닉스"}
-  - {code: "373220", name: "LG에너지솔루션"}
-  - {code: "207940", name: "삼성바이오로직스"}
-  - {code: "005380", name: "현대차"}
-  - {code: "000270", name: "기아"}
-  - {code: "068270", name: "셀트리온"}
-  - {code: "035420", name: "NAVER"}
-  - {code: "105560", name: "KB금융"}
-  - {code: "005490", name: "POSCO홀딩스"}
 benchmark: {code: "0001", name: "KOSPI"}
+data:
+  minute_time_label: start      # start | end. 2026-09-30 DEV smoke test: 첫 봉 090000 → 봉 시작 시각(start)
+  minute_start_hour: "160000"   # 하루치 첫 페이지 요청 시각
+  minute_max_pages: 6
+session:
+  open: "09:00"
+  continuous_end: "15:20"
 backtest:
-  end: auto                     # auto 또는 "YYYY-MM-DD"
-  months: 1
-  warmup_days: 90               # 달력일. fetch_start = requested_start - warmup_days
+  end: "2026-09-29"             # 고정. "auto"도 허용(오늘 − 1일)
+  days: 30                      # 달력 일수. start = end − (days − 1)일
+  initial_cash: 100000000
 strategy:
-  name: momentum_topn
-  params: {lookback_days: 20, top_n: 5, rebalance: weekly}
-capital: 100000000              # 원
-max_positions: 5                # strategy.params.top_n과 같아야 한다
-costs:                          # 단위 %. 0.015는 0.015%
-  buy_fee_pct: 0.015
-  sell_fee_pct: 0.015
-  sell_tax_pct: 0.20
-  slippage_pct: 0.0
-target_return: 2.0              # 단위 %. 백테스트 기간 전체에 대한 목표(기본 1개월 +2%)
+  name: intraday_breakout
+  bar_minutes: 5
+  entry_lookback: 6
+  exit_lookback: 3
+  vol_mult: 1.5
+  min_range_pct: 0.005
+  entry_cutoff: "14:50"
+  force_exit_time: "15:15"
+  cooldown_bars: 3
+  max_entries_per_symbol_per_day: 4
+  daily_loss_limit_pct: 0.01
+  position_pct: 0.5
+  min_bars_per_day: 60
+costs:                          # 비율(0.00015 = 0.015%)
+  buy_rate: 0.00015
+  sell_rate: 0.00215
+  slippage_rate: 0.0
+target:
+  monthly_return: 0.02
 output:
   result: output/result.json
   dashboard: output/dashboard.html

@@ -100,7 +100,37 @@ def test_request_shape_is_quote_only_and_adjusted_price(tmp_path, http):
     assert index["params"]["FID_COND_MRKT_DIV_CODE"] == "U" and index["headers"]["tr_id"] == "FHKUP03500100"
     assert c.call_count == 2
     public = {n for n in dir(KisClient) if not n.startswith("_")}
-    assert public == {"get_token", "daily_prices", "index_daily"}     # 시세 조회 메서드만(R2)
+    assert public == {"get_token", "daily_prices", "index_daily", "minute_prices"}   # 시세 조회만(R2)
+
+
+def test_minute_request_shape_and_raw_rows(tmp_path, http):
+    http.posts = [_token_resp()]
+    raw = [{"stck_bsop_date": "20260929", "stck_cntg_hour": "153000", "stck_prpr": "272500"}]
+    http.gets = [_ok(raw), _ok([])]
+    c = _client(tmp_path)
+    assert c.minute_prices("005930", date(2026, 9, 29), "160000") == raw      # 정규화하지 않는다
+    assert c.minute_prices("005930", date(2026, 9, 24), "160000") == []       # 빈 배열은 예외 아님
+    call = http.get_calls[0]
+    assert call["url"] == ("https://openapivts.koreainvestment.com:29443"
+                           "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice")
+    assert call["params"] == {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": "005930",
+                              "FID_INPUT_DATE_1": "20260929", "FID_INPUT_HOUR_1": "160000",
+                              "FID_PW_DATA_INCU_YN": "N", "FID_FAKE_TICK_INCU_YN": ""}
+    assert call["headers"]["tr_id"] == "FHKST03010230" and call["headers"]["custtype"] == "P"
+    assert call["headers"]["tr_cont"] == "" and c.call_count == 2
+
+
+def test_minute_unsupported_does_not_switch_env(tmp_path, http):
+    http.posts = [_token_resp()]
+    http.gets = [Resp(500, {"rt_cd": "1", "msg_cd": "OPSQ0002", "msg1": "없는 서비스 코드 입니다"})]
+    with pytest.raises(KisUnsupportedError) as exc:
+        _client(tmp_path).minute_prices("005930", date(2026, 9, 29), "160000")
+    assert "주식일별분봉조회" in str(exc.value) and "자동으로 PROD로 전환하지 않습니다" in str(exc.value)
+    assert len(http.get_calls) == 1 and "openapivts" in http.get_calls[0]["url"]
+
+
+def test_default_min_interval_is_half_second(tmp_path):
+    assert KisClient("DEV", KEY, SECRET, tmp_path)._min_interval == 0.5
 
 
 def test_rate_limit_retries_with_backoff_then_succeeds(tmp_path, http):

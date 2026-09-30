@@ -1,6 +1,6 @@
 """result.json -> 정적 HTML 대시보드 렌더러.
 
-계약: docs/architecture.md 1.8절, 5.2절(schema 1.x, 필터 6개).
+계약: docs/architecture.md 1.8절, 5.2절(schema 2.x, 필터 6개).
 - 표준 라이브러리 + jinja2 만 쓴다. stock_sim 의 다른 모듈을 import 하지 않는다.
 - 수치 계산(합계·비율·좌표)을 하지 않는다. 필터는 표시 변환만 한다.
 
@@ -26,7 +26,7 @@ NULL_TEXT = "–"
 SIGN_COLORS = {"pos": "#1428A0", "neg": "#B0472F", "zero": "#6E7688"}
 # 어두운 배경(헤더 KPI, 다크 패널)용. architecture.md 5.2절(개정 1.1), CLAUDE.md 8절.
 SIGN_COLORS_DARK = {"pos": "#7C9BFF", "neg": "#E29A80", "zero": "#FFFFFF"}
-SUPPORTED_MAJOR = "1"
+SUPPORTED_MAJOR = "2"
 
 
 def _is_null(value) -> bool:

@@ -1,4 +1,4 @@
-"""진입점. `python -m stock_sim run --config config.yaml` / `render` (architecture.md 1.9절).
+"""진입점. `python -m stock_sim run --config config.yaml` / `render` (architecture.md 1.9절, 2절).
 
 종료 코드: 0 성공 / 1 설정 오류 / 2 렌더 실패 / 3 KIS·데이터 오류.
 """
@@ -9,11 +9,10 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from stock_sim import backtest, config, data, metrics, report
+from stock_sim import backtest, config, data, metrics, report, strategy
 from stock_sim.config import ConfigError
 from stock_sim.data import DataError
 from stock_sim.kis_client import KisClient, KisError
-from stock_sim.strategy import STRATEGIES
 
 log = logging.getLogger("stock_sim")
 KST = timezone(timedelta(hours=9))
@@ -25,7 +24,8 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="데이터 수집 → 백테스트 → result.json → dashboard.html")
     run.add_argument("--config", required=True, type=Path)
-    run.add_argument("--refresh", action="store_true", help="일봉 캐시 무시(토큰 캐시는 유지)")
+    run.add_argument("--refresh", action="store_true",
+                     help="일봉 캐시만 무시(분봉 캐시·토큰 캐시는 그대로 쓴다)")
     run.add_argument("--no-render", action="store_true", help="result.json까지만 만든다")
     run.add_argument("--verbose", action="store_true")
     rend = sub.add_parser("render", help="기존 result.json으로 HTML만 다시 만든다")
@@ -37,12 +37,20 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _all_cached(cfg: dict, period: dict) -> bool:
-    cache_dir, start, end = cfg["paths"]["cache_dir"], period["fetch_start"], period["end"]
+    """일봉 3개 + (그 일봉으로 정한 후보 일자의) 분봉 파일이 전부 있으면 True."""
+    cache_dir, start, end = cfg["paths"]["cache_dir"], period["daily_fetch_start"], period["end"]
+    daily = {}
     for item in cfg["universe"]:
-        if data.read_cache(data.cache_path(cache_dir, item["code"], start, end), True) is None:
+        df = data.read_cache(data.cache_path(cache_dir, item["code"], start, end), True)
+        if df is None:
             return False
+        daily[item["code"]] = df
     idx = data.index_cache_code(cfg["benchmark"]["code"])
-    return data.read_cache(data.cache_path(cache_dir, idx, start, end), False) is not None
+    if data.read_cache(data.cache_path(cache_dir, idx, start, end), False) is None:
+        return False
+    days = data.trading_days(daily, period["start"], end)
+    return all(data.read_minute_cache(data.minute_cache_path(cache_dir, item["code"], d)) is not None
+               for item in cfg["universe"] for d in days)
 
 
 def _make_client(cfg: dict) -> KisClient:
@@ -57,7 +65,7 @@ def _render(cfg: dict, result_path: Path, out_path: Path, verbose: bool) -> int:
     try:
         from stock_sim.render import render      # 지연 import: render.py가 없어도 나머지는 돈다
         render(result_path=result_path, template_path=cfg["paths"]["template"], out_path=out_path)
-    except Exception as exc:                      # ImportError, FileNotFoundError, Jinja2 예외 등
+    except Exception as exc:                      # ImportError, FileNotFoundError, ValueError, Jinja2 예외
         log.error("대시보드 렌더 실패(%s): %s. result.json은 그대로 둡니다.", type(exc).__name__, exc,
                   exc_info=verbose)
         return EXIT_RENDER
@@ -69,40 +77,42 @@ def _run(args) -> int:
     cfg = config.load_config(args.config)
     today = datetime.now(KST).date()
     period = config.resolve_period(cfg, today)
-    log.info("환경 %s, 수집 구간 %s ~ %s, 백테스트 요청 시작 %s", cfg["kis"]["env"],
-             period["fetch_start"], period["end"], period["requested_start"])
+    log.info("환경 %s, 백테스트 구간 %s ~ %s, 일봉 수집 시작 %s", cfg["kis"]["env"],
+             period["start"], period["end"], period["daily_fetch_start"])
     client = None
     if args.refresh or not _all_cached(cfg, period):
         client = _make_client(cfg)
     else:
         log.info("캐시가 모두 있어 API를 호출하지 않습니다(토큰 발급 없음).")
-    prices, bench, issues, source = data.load_all(cfg, period, client, refresh=args.refresh)
-    calendar = data.build_calendar(prices)
-    days = [d for d in calendar if period["requested_start"] <= d <= period["end"]]
-    if not days:
+    minutes, daily, bench, issues, source = data.load_all(cfg, period, client, refresh=args.refresh)
+    params = cfg["strategy"]
+    sess = cfg["session"]
+    bars, auction = {}, {}
+    for code, df in minutes.items():
+        five = strategy.resample_bars(df, params["bar_minutes"], sess["open"], sess["continuous_end"])
+        bars[code] = strategy.signals(five, params)
+        auction[code] = strategy.auction_closes(df)
+    bt = backtest.run_backtest(bars, daily, auction, params, config.cost_rates(cfg),
+                               cfg["backtest"]["initial_cash"], session=sess)
+    if len(bt["days"]) == 0:
         raise DataError("백테스트 구간에 거래일이 0일입니다.")
-    strat = STRATEGIES[cfg["strategy"]["name"]]
-    params = cfg["strategy"]["params"]
-    need, have = strat["min_warmup"](params), calendar.index(days[0])
-    if have < need:
-        raise DataError(f"워밍업 부족: 백테스트 시작일 이전 거래일이 {need}일 필요한데 {have}일만 확보했습니다.")
-    schedule = strat["schedule"](calendar, days[0], days[-1], params)
-    targets = strat["targets"](prices, calendar, schedule, params)
-    bt = backtest.run_backtest(prices, calendar, schedule, targets, days[0], days[-1],
-                               cfg["capital"], cfg["max_positions"], config.cost_rates(cfg))
+    capital = cfg["backtest"]["initial_cash"]
+    days = list(bt["days"]["date"])
+    daily_tab = metrics.daily_table(bt["days"], bt["fills"], bt["closed"], capital)
     try:
-        bench_df, bench_info = metrics.benchmark_curve(bench, days, cfg["capital"])
+        bench_df, bench_info = metrics.benchmark_curve(bench, days, capital)
     except ValueError as exc:
         raise DataError(str(exc)) from None
-    bench_info["equal_weight_return"] = metrics.equal_weight_return(prices, days)
-    bench_info["equal_weight_count"] = metrics.equal_weight_count(prices, days)
-    period["rebalances"] = len(schedule)
+    bench_info["equal_weight_return"] = metrics.equal_weight_return(daily, days)
+    bench_info["equal_weight_count"] = metrics.equal_weight_count(daily, days)
     generated_at = datetime.now(KST).isoformat(timespec="seconds")
-    result = report.build_result(cfg, period, bt, bench_df, bench_info, issues, source, generated_at)
+    result = report.build_result(cfg, period, bt, daily_tab, bench_df, bench_info, issues, source,
+                                 generated_at)
     path = report.write_result(result, cfg["paths"]["result"])
     s = result["summary"]
-    log.info("result.json 저장: %s (수익률 %.2f%%, KOSPI %.2f%%, MDD %.2f%%, 체결 %d건)", path,
-             s["total_return_pct"], s["benchmark_return_pct"], s["mdd_pct"], s["trade_count"])
+    log.info("result.json 저장: %s (수익률 %.2f%%, KOSPI %.2f%%, MDD %.2f%%, 체결 %d건, 청산 %d건)", path,
+             s["total_return_pct"], s["benchmark_return_pct"], s["mdd_pct"], s["trade_count"],
+             s["closed_count"])
     if args.no_render:
         return EXIT_OK
     return _render(cfg, cfg["paths"]["result"], cfg["paths"]["dashboard"], args.verbose)

@@ -1,6 +1,6 @@
 # stock-sim 아키텍처 (architecture.md)
 
-**버전 2.0 · 2026-09-30** · 담당: architect (Phase 2b) · 상태: reviewer 검토 대기
+**버전 2.0 · 2026-09-30** · 담당: architect (Phase 2b) · 상태: reviewer PASS(`reviews/phase2-2.md`), Low 2·5 반영
 v1(일봉 `momentum_topn`, 스키마 1.1, 개정 1.2)은 git 이력에 있다. v2는 사용자가 승인한 전략 교체(`docs/strategy.md` v2, 분봉 단타 `intraday_breakout`)에 맞춘 개정이다.
 
 이 문서와 `docs/result.example.json`은 implementer와 dashboard-builder 사이의 **계약**이다.
@@ -443,7 +443,7 @@ output:
 | 인코딩 | UTF-8, `ensure_ascii=False`, 들여쓰기 2. `NaN`·`Infinity` 금지(없으면 `null`) |
 | 금액·수량 | 정수(원, 주). 지수 값만 실수 |
 | 비율 | **퍼센트 단위 숫자**, 키가 `_pct`로 끝난다. 소수 4자리. 표시는 필터가 2자리로 만든다 |
-| 기하 값 | 좌표 소수 1자리(계약 테스트는 형식·범위만 본다). `height_pct`, `bar_pct`, `start_pct`, `end_pct`, `x_pct`, `width_pct`, `progress_pct`는 소수 2자리 |
+| 기하 값 | 좌표는 소수 1자리. 반올림 방식(half-up, Python `round`/`%.1f` 등)은 구현이 정하며 계약 테스트는 형식·범위만 본다(예시 파일과 0.1 차이가 나도 계약 위반이 아니다). `height_pct`, `bar_pct`, `start_pct`, `end_pct`, `x_pct`, `width_pct`, `progress_pct`는 소수 2자리 |
 | 부호 | `sign` 또는 `<이름>_sign` = `"pos"` / `"neg"` / `"zero"`. 흰 배경은 `sign_color`, 어두운 배경은 `sign_color_dark` |
 | 색 | 도넛·막대 조각·알림 점은 JSON의 `color`(hex)를 그대로 쓴다 |
 | 날짜·시각 | `"YYYY-MM-DD"`, `"HH:MM"`. `generated_at`만 ISO 8601(`+09:00`) |
@@ -720,8 +720,8 @@ KIS DEV(모의투자) 도메인에서 <API 이름> 조회에 실패했습니다 
 | 3 | 자산 곡선 시작점 | strategy.md 9절이 architect에게 맡긴 부분. 좌표에만 시작점(E0)을 붙이고 `equity_curve[]`에는 넣지 않는다 |
 | 4 | 주차별 집계 | strategy.md 9절의 주별 보유 평가액·현금은 result.json에 담지 않는다(항상 0·전액). 주별 거래대금만 `charts.trade_value_bars`에 쓴다 |
 | 5 | 슬리피지 고지 | strategy.md 11.3절에 해당 알림 코드가 없어 알림으로 만들지 않고 `meta.slippage_note`(점검 필요 카드 하단)와 `meta.disclaimers`(13절 4번)에 넣었다 |
-| 6 | `BAR_MISSING` 집계 범위 | `DAY_SKIPPED`가 아닌 날의 무효 슬롯만 센다고 해석했다(쉰 날은 `DAY_SKIPPED`가 알린다). strategy.md 8절 3번에 명시가 없다 |
-| 7 | `PRICE_ANOMALY` 범위 | 같은 날 안의 직전 유효 봉 대비로 해석했다(밤사이 갭은 대상이 아니다) |
+| 6 | `BAR_MISSING` 집계 범위 | `DAY_SKIPPED`가 아닌 날의 무효 슬롯만 센다(쉰 날은 `DAY_SKIPPED`가 알린다). strategy.md 8절 3번과 같다 |
+| 7 | `PRICE_ANOMALY` 범위 | 같은 날 안의 직전 유효 봉 대비만 본다(밤사이 갭은 대상이 아니다). strategy.md 8절 7번과 같다 |
 | 8 | 대체 청산가 | strategy.md 8절 5번의 "15:30 1분봉"은 단일가 봉이 `15:30` 라벨로 온다는 가정이다. smoke test 7단계에서 확인한다 |
 | 9 | 표시 라벨 | `reason_label`, `status_label`, `blocks.items[].label`, `charts.daily_pnl.caption`, `trade_table.caption`, `blocks.caption`은 strategy.md에 없어 이 문서가 정했다(표시 전용, 매매에 영향 없음) |
 | 10 | 대시보드 세 자리 대체 | 오케스트레이터 결정을 반영했다. 사용자 최종 확인과 CLAUDE.md 8절 표 갱신이 남아 있다 |

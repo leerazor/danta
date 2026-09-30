@@ -13,7 +13,7 @@
 - **v2 전환(2026-09-30 사용자 요청): 분봉 단타 `intraday_breakout`, 유니버스 005930·000660, 과거 30일 고정(2026-08-31 ~ 2026-09-29). 아래 V2 항목이 현재 진행선이며 W5(v1 개선 루프)는 보류한다.**
 - [x] V2-1 조사 E — `kis-researcher` → `docs/research/intraday-data.md` (결론: DEV로 과거 분봉(`FHKST03010230`) 조회 가능 추정·실호출 미검증 → 구현 첫 작업 smoke test로 확정. 실패 시 PROD read-only 사용 여부를 사용자에게 질문)
 - [x] V2-2a 로직 — `strategy-designer` → `docs/strategy.md` v2 (5분봉 채널 돌파 + VWAP·거래량·변동폭 필터, 15:15 전량 청산)
-- [ ] V2-2b 설계 — `architect` → `docs/architecture.md` 2.0, `docs/result.example.json` → `reviewer`(`phase2-2.md`) PASS
+- [x] V2-2b 설계 — `architect` → `docs/architecture.md` 2.0, `docs/result.example.json` → `reviewer`(`phase2-2.md`) **PASS**(High 0·Med 1·Low 6, 손계산·예시 JSON 항등식 8개 실행 검증 일치). Med 1(11.6절 기대값 ↔ BAR_MISSING)·Low 2·3·4·5는 W3와 병렬로 문구 수정
 - [ ] V2-3 구현 ∥ V2-4 대시보드 — `implementer` ∥ `dashboard-builder` → 통합 실행 → `reviewer` ×2 PASS
 - [ ] V2-5 최종 실행·보고 — 사용자 확인 포인트: 대시보드 대체 섹션(거래대금 비중 도넛·평균 보유 시간·일별 손익), 슬리피지 0 가정, 운영 파라미터 기본값
 - [ ] W5a · Phase 6 개선 루프(탐색) — `alpha-researcher`(Phase 3 PASS 후) ∥ `kis-researcher`(D) ∥ `ux-reviewer` → `docs/alpha/exp-1.md`, `docs/research/volume-data.md`, `docs/reviews/ux-1.md` → 채택안·UX P1을 사용자에게 한 번에 질문
