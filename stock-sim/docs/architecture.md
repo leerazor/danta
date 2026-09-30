@@ -698,11 +698,13 @@ KIS DEV(모의투자) 도메인에서 <API 이름> 조회에 실패했습니다 
 | 일봉 재수집 | 위 명령 + `--refresh` | 같음(분봉은 다시 받지 않는다) |
 | HTML만 다시 | `uv run --directory src python -m stock_sim render --config ../config.yaml` | `output/dashboard.html` |
 | 예시 렌더(W3) | `uv run --with jinja2 python src/stock_sim/render.py --result docs/result.example.json --template templates/dashboard.html.j2 --out output/dashboard.example.html` | `output/dashboard.example.html` |
+| 자동 갱신 등록 | `powershell -ExecutionPolicy Bypass -File scripts\register_schedule.ps1` (`-Unregister`로 해제) | 작업 스케줄러 `stock-sim-dashboard`(화~토 07:30), `data/logs/scheduled_run.log` |
 | 테스트 | `uv run pytest` | – |
 
 - 워크트리에서 `.env`를 못 찾으면: PowerShell `$env:STOCK_SIM_ENV_FILE = "<저장소 루트>\.env"`(경로만 지정, 내용 출력 금지).
-- `[tool.uv] package = false`, `pythonpath = ["src"]`, `markers = ["network: 실 API 호출"]`, `addopts = "-m 'not network'"`는 v1 그대로다.
-- `output/dashboard.html`에는 실데이터 결과만 쓴다(CLAUDE.md 6.6절).
+- `[tool.uv] package = false`, `pythonpath = ["src"]`, `markers = ["network: 실 API 호출"]`, `addopts = "-m 'not network'"`는 v1 그대로다(한글 경로에서 Python 3.11이 편집 가능 설치의 `.pth`를 읽지 못하므로 `--directory src`로 실행).
+- `output/dashboard.html`에는 실데이터 결과만 쓴다. 예시 데이터는 `output/dashboard.example.html`에만 쓴다(CLAUDE.md 6.6절).
+- 자동 갱신(v1에서 도입, v2 병합): 스케줄러가 전체 실행으로 HTML을 다시 만들고, 템플릿의 `<meta http-equiv="refresh" content="300">`가 열린 탭을 5분마다 다시 읽게 한다(JS·서버 불필요, `file://` 그대로). 헤더 "생성"은 `meta.generated_at`을 분 단위로 보인다. v2 `config.yaml`은 사용자 요구("과거 30일 고정")대로 `backtest.end: "2026-09-29"`로 고정돼 있어 스케줄 실행 결과가 매일 같다. 구간을 매일 굴리려면 `backtest.end: auto`(어제까지, `days: 30` 유지)로 바꾼다 — 새 거래일 분봉을 받으므로 DEV API 호출이 생긴다.
 
 ## 10. W3 파일 소유와 변경 목록 (CLAUDE.md 6.6절)
 

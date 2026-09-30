@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="300">
 <title>{{ meta.title }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,7 +29,7 @@
       <div style="display: flex; flex-direction: column; gap: 8px;">
         <div style="font-size: 11px; letter-spacing: 0.22em; color: #7C9BFF; font-weight: 700;">{{ meta.label }}</div>
         <h1 style="margin: 0; font-family: 'Gothic A1', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.01em; color: #FFFFFF;">{{ meta.title }}</h1>
-        <div style="font-size: 13px; color: #98A3D2;">백테스트 구간 {{ meta.period.start }} ~ {{ meta.period.end }} · {{ meta.period.trading_days }}거래일 · {{ meta.strategy.label }} · {{ meta.universe|map(attribute="name")|join("·") }} · 생성 {{ meta.generated_at[:10] }}{% if meta.is_example %} · 예시 데이터(가짜 수치){% endif %}</div>
+        <div style="font-size: 13px; color: #98A3D2;">백테스트 구간 {{ meta.period.start }} ~ {{ meta.period.end }} · {{ meta.period.trading_days }}거래일 · {{ meta.strategy.label }} · {{ meta.universe|map(attribute="name")|join("·") }} · 생성 {{ meta.generated_at[:16]|replace('T', ' ') }}{% if meta.is_example %} · 예시 데이터(가짜 수치){% endif %}</div>
       </div>
       <div style="display: flex; align-items: center; gap: 10px;">
         <div style="display: flex; background: rgba(200,210,240,0.12); border: 1px solid rgba(200,210,240,0.24); border-radius: 8px; overflow: hidden;">

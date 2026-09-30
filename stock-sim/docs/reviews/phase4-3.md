@@ -1,65 +1,66 @@
-# Phase 4 리뷰 3회차 (v2 대시보드 1회차)
+# Phase 4 리뷰 3회차: 대시보드 자동 갱신 (커밋 ade5f0e)
 
-- 대상: `templates/dashboard.html.j2`, `src/stock_sim/render.py`, `tests/test_render.py`, 실데이터 `output/result.json` → `output/dashboard.html`
-- 기준: CLAUDE.md 2절·8절(v2 매핑 표), architecture.md 1.8·5.1~5.7절, strategy.md 11·12·13절
-- 작업 위치: 워크트리 `.claude/worktrees/intraday-scalping` (네트워크 호출 없음, `.env`·토큰 캐시 읽지 않음)
+- 대상: `templates/dashboard.html.j2`, `scripts/register_schedule.ps1`(신규), `tests/test_render.py`, `docs/architecture.md` 9절
+- 브랜치: `worktree-auto-refresh-dashboard`
+- 기준: CLAUDE.md 2절·7절·8절, architecture.md 9절, `config.py::resolve_period`, `cli.py` run 흐름
 
 ## 판정: **PASS**
 
-High 0 · Med 0 · Low 3
+High 0 · Med 0 · Low 5. blocking finding은 없다. Low는 기록만 하고 non-blocking 제안으로 남긴다.
+
+## 테스트 실행 원문
+
+`stock-sim/`에서 `uv run pytest`:
+
+```
+collected 155 items / 2 deselected / 153 selected
+... (test_render.py 16건 포함, 전부 통과)
+====================== 153 passed, 2 deselected in 2.52s ======================
+```
+
+2 deselected는 `-m network` 마커 테스트다(기본 제외). 테스트는 네트워크 없이 돈다.
 
 ## findings
 
-| # | 심각도 | 파일/섹션 | 문제 | 근거 | 수정 제안 | 담당 |
-|---|---|---|---|---|---|---|
-| 1 | Low | `dashboard.html.j2:42-62` 헤더 KPI | 1280px에서 헤더 KPI 4개가 한 줄에 다 들어가지 않아 4번째 "거래 횟수 74회"가 둘째 줄로 내려간다(`flex-wrap: wrap`). 값은 모두 보이고 가로 스크롤도 없다 | Chrome headless `--window-size=1280,4000` 스크린샷 `output/review-phase4-3.png` 상단 | `gap: 34px`를 줄이거나 보조 문구(예: "최종 …원")의 글자 크기·폭을 줄여 한 줄에 맞춘다(선택) | dashboard-builder |
-| 2 | Low | `dashboard.html.j2:108` KPI ④ 보조줄 | "일평균 청산 1.85건 · 체결 3.7건" — 두 값의 소수 자릿수가 다르다. JSON 값이 `3.7`(float 직렬화에서 끝의 0이 빠짐)이고, 템플릿이 값을 그대로 출력한다. architecture.md 5.3절은 "소수 2자리"라고 정한다 | `summary.avg_fills_per_day = 3.7`, `avg_closed_per_day = 1.85`. 대시보드 텍스트 36번 노드 | 템플릿에서 `"%.2f"\|format(...)`로 표시만 맞춘다(계산이 아니라 표시 형식) | dashboard-builder |
-| 3 | Low | `dashboard.html.j2:216-265` 일별 손익 카드 | 같은 행의 다크 패널이 더 길어 카드가 늘어나면서, 막대 라벨과 caption 사이에 큰 빈 공간이 생긴다(caption에 `margin-top: auto`) | 스크린샷 "일별 손익" 카드 | 막대 영역 높이를 늘리거나 caption을 막대 바로 아래에 붙인다(선택, UX) | dashboard-builder |
+| 심각도 | 파일:줄 | 문제 | 근거 | 수정 제안 |
+|---|---|---|---|---|
+| Low | `scripts/register_schedule.ps1:24` | Windows PowerShell 5.1에서 `*>>` 리다이렉트는 로그를 UTF-16LE로 쓰고, Python `logging`이 쓰는 stderr 줄을 `NativeCommandError` 레코드로 감싼다(첫 줄에 `python.exe : …`, `CategoryInfo` 같은 줄이 붙는다). 동작에는 문제가 없고 로그를 읽기가 불편할 뿐이다. | PS 5.1의 Out-File 기본 인코딩은 Unicode이고, 네이티브 stderr를 리다이렉트할 때 ErrorRecord로 변환하는 것은 5.1의 알려진 동작이다. 리다이렉트는 `$cmd` 문자열 안에 있다(`*>> '$log'`). | 필요하면 `cmd.exe /c "... >> log 2>&1"`로 실행하거나 파이썬 쪽에 로그 파일 핸들러를 둔다. |
+| Low | `scripts/register_schedule.ps1:24` | 경로를 작은따옴표로 감싸므로 공백과 한글은 안전하다. 다만 경로에 `'`가 있으면 명령이 깨진다. 현재 경로에는 `'`가 없다. | `$cmd = "Set-Location -LiteralPath '$root'; & '$uv' … *>> '$log'"`. 바깥은 `` `"$cmd`" ``이고 `$cmd`에는 큰따옴표가 없어서 `-Command` 인자가 하나로 넘어간다. | `$root.Replace("'", "''")` 식 이스케이프(선택). |
+| Low | `scripts/register_schedule.ps1:11-15` | 작업이 없을 때 `-Unregister`를 실행하면 `Unregister-ScheduledTask` 오류가 그대로 나온다. | 존재 여부를 확인하지 않고 바로 호출한다. | `Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue`로 먼저 확인한다(선택). |
+| Low | `cli.py:39-45`, `config.py:165-166` (이번 변경의 결과) | `end: auto`와 매일 실행이 합쳐져 캐시 키(`<코드>_<fetch_start>_<end>.csv`)가 매일 바뀐다. 그래서 실행마다 11개 계열(10종목 + 지수)을 새로 받고, 이전 CSV는 `data/cache/`에 계속 쌓인다(약 11파일/일). 새 일봉을 반영하려면 필요한 재수집이라 결함은 아니다. 평일 공휴일 다음 날에는 같은 데이터를 한 번 더 받는다. | `resolve_period`: `end = today - 1일`이고 `fetch_start = end - months - warmup_days`라서 두 날짜가 모두 매일 이동한다. `_all_cached`는 정확한 키로만 판정한다. 화~토 스케줄은 일·월 실행(end=토·일)을 빼므로 주말에 새 데이터 없이 재수집하는 일은 없다. 이 부분은 맞다. | 오래된 캐시 정리는 별도 과제로 둔다(범위 밖). |
+| Low | `src/stock_sim/render.py:125-127` | `dashboard.html`을 바로 덮어쓴다(원자적 교체가 아님). 5분 주기 meta refresh가 쓰기 도중과 겹치면 잘린 HTML이 한 번 보일 수 있다. 다음 새로고침에서 바로 복구된다. | `with out_path.open("w", …) as f: f.write(html)` | 임시 파일에 쓴 뒤 `os.replace`로 교체한다(선택, dashboard-builder 소유). |
 
-## 확인한 항목 (통과)
+## 중점 확인 결과
 
-### 실행
-- `uv run pytest tests/test_render.py -q` → `18 passed in 1.39s`
-- `uv run pytest -q`(전체) → `141 passed, 4 deselected in 6.37s` (network 마커 제외, 네트워크 없이 실행)
-- `render(output/result.json, templates/dashboard.html.j2, <임시 경로>)` 재렌더 결과가 `output/dashboard.html`과 **바이트 단위로 같음**(`identical True`). 임시 파일은 삭제함 → 대시보드가 현재 result.json에서 생성된 것임을 확인
+1. **R1 키 노출(로그 리다이렉트 포함)**: 리다이렉트는 stdout·stderr를 모두 받는다. 그래서 이 로그에 들어갈 수 있는 출력원을 확인했다.
+   - `kis_client.py:65-66` `_mask`는 앞 4자리만 남긴다. `:87` 초기화 로그도 마스킹된 키만 찍는다.
+   - `:95-97` `_scrub`는 key·secret·token을 응답 메시지에서 치환한다. `:211`에서 `msg_cd`·`msg1`에 적용된다.
+   - 네트워크 예외는 `type(exc).__name__`만 남긴다(`:205`). 그래서 요청 헤더(appkey·appsecret)가 메시지에 들어가지 않는다.
+   - `cli.py:122`은 urllib3을 WARNING으로 올린다. `:126-131` 예외는 `exc_info=args.verbose`이고, 스케줄 명령에는 `--verbose`가 없다.
+   - ps1 자체는 `.env`를 읽지 않고 키를 다루지 않는다. 로그 경로 `data/logs/`는 `stock-sim/.gitignore`의 `data/`에 포함돼 커밋되지 않는다.
+2. **R2**: `stock-sim/`에서 `trading/|order-cash|inquire-balance`를 검색하면 기존 리뷰 문서(체크리스트 문구)에서만 나온다. 이번 커밋 파일에서는 0건이다.
+3. **R3**: ps1은 `config.yaml`을 그대로 쓴다(`env: DEV`). 환경 전환 로직은 없다.
+4. **8절 규약**:
+   - `<meta http-equiv="refresh" content="300">`는 HTML 표준 태그라서 외부 JS에 해당하지 않는다.
+   - `generated_at[:16]|replace('T',' ')`는 문자열을 자르고 바꾸는 표시 변환일 뿐이다. 수치를 계산하지 않으므로 "템플릿은 계산하지 않는다" 규칙에 맞는다. 예시값 `2026-09-30T09:15:00+09:00`은 `2026-09-30 09:15`로 표시된다. 날짜 부분은 `YYYY-MM-DD` 표기를 유지한다.
+   - 색 토큰·구조 변경은 없다.
+5. **ps1 따옴표·경로·PS 5.1 호환**:
+   - 파일 앞 3바이트가 `ef bb bf`(UTF-8 BOM)라서 5.1이 한글 문자열을 올바르게 읽는다.
+   - `$PSScriptRoot`, `Join-Path`, `New-ScheduledTask*`, `Register-ScheduledTask -Force`는 모두 5.1에서 쓸 수 있다. `-DaysOfWeek Tuesday, …, Saturday`와 `-At "07:30"` 문자열 바인딩도 유효하다.
+   - `-WorkingDirectory $root`와 `Set-Location -LiteralPath`가 이중으로 걸려 있어 cwd가 보장된다. 그래서 `--directory src`와 `../config.yaml` 상대 경로가 맞는다(architecture.md 9절과 같은 명령).
+   - 주의: 이 세션의 worktree 격리 정책 때문에 `powershell.exe` 파서 검증(ParseFile)은 실행하지 못했다. 위 내용은 정적 분석 결과다. 스케줄러는 등록하지 않았다.
+6. **end:auto와 화~토 조합**: 논리는 맞다. 화요일 07:30에 돌면 end는 월요일이고, 토요일에 돌면 end는 금요일이다. 즉 직전 거래일 종가까지 반영된다. 매일 재수집하는 것은 새 데이터 때문에 필요하다(위 Low 4).
+7. **테스트 적정성**: `test_auto_refresh_and_generated_time`은 meta 태그가 정확한 문자열로 있는지, 생성 시각이 분 단위 `YYYY-MM-DD HH:MM`으로 보이는지 확인한다. 예시 JSON 기반이라 네트워크 없이 돈다. 변경 범위에 맞다. ps1은 테스트 대상이 아니다(OS 스케줄러 의존). 이는 타당하다.
+8. **architecture.md 9절**: 명령표에 한 줄, 설명에 한 문단이 추가됐다. ps1 사용법(`-Unregister`)과 로그 경로가 스크립트와 일치한다.
 
-### 1. result.json ↔ dashboard.html 값 대조 (HTMLParser로 보이는 텍스트 전체 추출 후 비교)
-- 헤더 KPI 4개: 누적 수익률 `-4.75%`(-4.7469), 최종 `95,253,068원`, 초과수익 `-8.64%p`(-8.6364), KOSPI `+3.89%`(3.8894) · "시장 하회", MDD `-5.02%`(-5.0185) · `2026-08-31 → 2026-09-29`, 거래 횟수 `74회` · 매수 37 · 매도 37 — 전부 일치
-- KPI 카드 5개: 최종 평가금액 `95,253,068원`/`-4.75%`, 실현 손익 `-4,746,932원`·비용 전 손익 `-626,250원`·총 비용 `4,120,682원`, 승률 `29.73%`(11/37 재계산 29.7297) · 11승 26패 · 청산 37건, 평균 보유 `60.8분`, 총 거래대금 `3,583,744,250원` · `7,380주` — 일치
-- 도넛: SK하이닉스 `1,930,135,000원` `53.86%`, 삼성전자 `1,653,609,250원` `46.14%`, 중앙 `74건`, conic `0%–53.86%–100%` — 일치, 마지막 `end_pct = 100.0`
-- 일별 손익 막대 20일: 각 날 `height_pct`를 `|pnl| / max_abs(1,126,529) × 100`으로 재계산해 20행 모두 일치(오차 0), gain/loss 색 `#1428A0`/`#B0472F` 고정, `sign` 일치. 매매 중단일 09-01·09-03 `halted=true` = `halt_days 2`, 주황 원 표시. 라벨은 ISO 주 첫 거래일(08-31, 09-07, 09-14, 09-21, 09-28)만. caption "수익 5일, 손실 13일, 손익 없음 2일 …" 일치
-- 종목별 기여 상위 5: 삼성전자 `-2,425,377원`(bar 100), SK하이닉스 `-2,321,555원`(bar 95.72) — 절댓값 순, note는 strategy 11.4절 "N=0, M≥1" 틀과 일치
-- 종목별 상세: 거래 40/34회, 청산 20/17건, 승률 30.00%/29.41%, 평균 보유 50.2/73.2분, 수익률 -0.24%/-0.29%. 수익률을 `realized_pnl / 종목 매수금액 × 100`으로 재계산(-0.2405 / -0.2933) — 표시값 일치
-- 알림 7개: warn 4(MDD_BREACH, LOSS_STREAK, UNDERPERFORM, COST_DRAG) → info 3(DAILY_LOSS_HALT, OVERNIGHT_GAP_NOTE, LOW_SAMPLE) 순서·등급·title/detail이 strategy.md 11.3절 틀과 일치. 색: 앞 3개 `#B0472F`, COST_DRAG `#C98A2E`, info `#1428A0`(architecture 5.3절). `only_baseline_alerts=false`라 "특이 리스크 없음" 미표시가 맞음
-- 목표 진척: 진척 0.00%(원값 -237.35 → clip 0), 현재 `-4.75%` 손실색, caption "6.75%p 못 미쳤습니다 … 6,746,932원 부족"(102,000,000 − 95,253,068 = 6,746,932 재계산 일치). 음수 진척률 문구 없음
-- 매매 내역: `in_table` 행 = `trades[-20:]`(True), HTML 20행을 JSON과 열 11개(날짜·시각·종목·코드·구분·수량·체결가·금액·비용·실현손익·보유분·사유) 모두 대조해 불일치 0. 헤더 "전체 74건 중 최근 20건 · 비용 합계 4,120,682원", 하단 caption "최근 20건 표시 · 전체 74건은 result.json의 trades[]에 있습니다." 일치
-- 분석 요약 3문장·다음 조치: strategy.md 11.1·11.2절 틀과 일치(② 종목 절은 코드 오름차순 000660 → 005930, 다음 조치는 4번 규칙·절댓값 상위 "삼성전자·SK하이닉스")
-- 항등식 재계산: `final − initial = total_pnl = realized = gross − cost = -4,746,932`, `Σdaily.pnl = Σclosed.pnl = Σper_stock = -4,746,932`, `Σtrades.amount = total_trade_value = share.total`, `Σtrades.cost = total_cost`, MDD를 equity_curve에서 재계산 -5.0185 일치, 최대 연속 손실 9 일치
-- 표기: 금액 원 콤마, 비율 소수 2자리 %, 날짜 `YYYY-MM-DD`(trades 74건 정규식 전부 통과). `-0.00%`·`+0원` 없음 (예외: finding 2)
+## 확인한 항목
 
-### 2. 부호와 색
-- `color:` 뒤에 부호 있는 수치가 오는 요소 24개 전부 검사: 양수 → `#1428A0`/`#7C9BFF`, 음수 → `#B0472F`/`#E29A80`, 불일치 0. 헤더(어두운 배경)는 `#E29A80` 3개, 흰 배경은 `#B0472F`. 매수 행 실현손익은 `sign=zero` 회색 `–`
-- 색 없이 쓰인 음수는 문장(caption·인사이트·알림 detail)뿐이며 중립색이다
-
-### 3. 템플릿 원칙
-- 템플릿에 산술 없음(표시·분기·`"{:,}".format`·`[:10]` 슬라이스만). 좌표·비율·height는 모두 JSON 값
-- `<script` 0건, `src=` 0건. 외부 리소스는 Google Fonts `<link>` 3줄뿐이며 `dashboard-sample.html` 7~9줄과 같다(JS 아님)
-- 스타일은 인라인(기본 리셋 `<style>` 블록은 샘플과 같은 구성)
-- SVG: 자산 곡선 viewBox `0 0 720 250` — 전략 점 x 0~720, y 183.9~246.8, 벤치마크 y 99.2~197.1, area path 0~720. 스파크라인 viewBox `0 0 200 44` — 3개 모두 y 3.0~41.0, x 0~200. 모두 viewBox 안. y축 15.0~-5.0이 데이터 범위(전략 -4.75~+0.29, KOSPI -0.77~+7.07)를 덮음
-- 잔여물 `{{`, `{%`, `None`, `nan`, `NaN`, `Infinity`, `undefined` 0건
-
-### 4. 섹션
-- CLAUDE.md 8절 v2 매핑 12개 + 한계 고지 모두 존재(헤더, KPI 4, 카드 5, 자산 곡선, 거래대금 도넛, 일별 손익, 기여 상위 5, 분석 요약, 종목별 상세, 점검 필요(+진입 차단 집계), 목표 진척, 매매 내역)
-- v1 잔재 grep(`포지션 비중|보유 종목|주차별|holding_count|cash_weight`) templates·dashboard.html·result.json·render.py 0건
-- `meta.slippage_note` 점검 필요 카드 하단 표시, `meta.disclaimers` 9개 하단 표시
-
-### 5. 보안 (R1·R2·R4)
-- dashboard.html·result.json에서 `APP_KEY`, `SECRET`, `token`, `계좌`, `acnt`, `CANO`, `.env`, `C:/`, `C:\`, `Users`, 사용자 이름·이메일 0건 → 키·계좌·개인정보·로컬 절대 경로 노출 없음
-- `stock-sim/`(docs 제외)에서 `trading/|order-cash|inquire-balance` 0건
-- `meta.env = "DEV"`, `is_example = false`
-
-### 6. 가독성 (1280px, Chrome headless)
-- 스크린샷 `output/review-phase4-3.png`(1280×4000): 가로 넘침·잘림 없음, 한글 깨짐 없음, 20행 매매 내역 정상 표시. 헤더 KPI 줄바꿈과 일별 손익 카드 여백은 Low 1·3
-
-### render.py (architecture 1.8절)
-- 시그니처 `render(result_path, template_path, out_path) -> Path`, `autoescape=True`, `StrictUndefined`, 필터 6개, schema major `2` 검사, 부모 폴더 생성, UTF-8 쓰기, `print` 없음, 다른 `stock_sim` 모듈 import 없음
+- [x] R1 시크릿 출력 코드 없음, 로그 마스킹 경로 확인
+- [x] R2 이번 변경 파일에 금지 경로 문자열 0건
+- [x] R3 PROD 기본값 아님, 자동 전환 없음
+- [x] R4 계좌·잔고·개인정보 없음(생성 시각만 추가)
+- [x] `uv run pytest` 153 passed, 네트워크 불필요
+- [x] 템플릿 잔여물 위험 없음(`generated_at`은 필수 키, 문자열 슬라이스)
+- [x] 외부 JS 없음, 템플릿 계산 없음, 스타일 불변
+- [x] ps1 UTF-8 BOM, 5.1 cmdlet 호환, 공백·한글 경로 인용(정적 분석)
+- [x] 스케줄 요일과 `end: auto` 정합
