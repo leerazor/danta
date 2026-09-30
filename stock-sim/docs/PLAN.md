@@ -10,6 +10,12 @@
 - [x] W3 · Phase 3 구현 — `implementer` → `src/`, `tests/`, `config.yaml`, `output/result.json` → reviewer PASS (`phase3-1.md` PASS·Med 2 → 수정 → `phase3-2.md` PASS, Low 3 중 테스트·PLAN 명령 반영)
 - [x] W3 · Phase 4 대시보드 — `dashboard-builder`(Phase 3과 병렬, `result.example.json` 기준) → `templates/`, `render.py`, `output/dashboard.html` → reviewer PASS (`phase4-1.md` PASS·Med 2 → UX P1·승인된 규약 변경(C-1~C-3)과 함께 수정 → `phase4-2.md` PASS). DEV 일봉·지수 실호출 smoke test 통과
 - [ ] W4 · Phase 5 최종 실행·검수 — 최종 실행 완료(2026-09-30: `uv run pytest` 152 passed, 공식 진입점 API 0회·캐시 11건, 총수익률 -0.84%, KOSPI +3.89%, 초과 -4.73%p, MDD -5.14%, 거래 13회, 최종 평가액 99,161,144원). **사용자 확인 대기**
+- **v2 전환(2026-09-30 사용자 요청): 분봉 단타 `intraday_breakout`, 유니버스 005930·000660, 과거 30일 고정(2026-08-31 ~ 2026-09-29). 아래 V2 항목이 현재 진행선이며 W5(v1 개선 루프)는 보류한다.**
+- [x] V2-1 조사 E — `kis-researcher` → `docs/research/intraday-data.md` (결론: DEV로 과거 분봉(`FHKST03010230`) 조회 가능 추정·실호출 미검증 → 구현 첫 작업 smoke test로 확정. 실패 시 PROD read-only 사용 여부를 사용자에게 질문)
+- [x] V2-2a 로직 — `strategy-designer` → `docs/strategy.md` v2 (5분봉 채널 돌파 + VWAP·거래량·변동폭 필터, 15:15 전량 청산)
+- [ ] V2-2b 설계 — `architect` → `docs/architecture.md` 2.0, `docs/result.example.json` → `reviewer`(`phase2-2.md`) PASS
+- [ ] V2-3 구현 ∥ V2-4 대시보드 — `implementer` ∥ `dashboard-builder` → 통합 실행 → `reviewer` ×2 PASS
+- [ ] V2-5 최종 실행·보고 — 사용자 확인 포인트: 대시보드 대체 섹션(거래대금 비중 도넛·평균 보유 시간·일별 손익), 슬리피지 0 가정, 운영 파라미터 기본값
 - [ ] W5a · Phase 6 개선 루프(탐색) — `alpha-researcher`(Phase 3 PASS 후) ∥ `kis-researcher`(D) ∥ `ux-reviewer` → `docs/alpha/exp-1.md`, `docs/research/volume-data.md`, `docs/reviews/ux-1.md` → 채택안·UX P1을 사용자에게 한 번에 질문
 - [ ] W5b · Phase 6 개선 루프(반영) — `strategy-designer` ∥ `dashboard-builder` → `implementer` → `reviewer` ×2 PASS → 통합 실행
 
@@ -32,6 +38,7 @@
 - 실거래·모의투자 주문, 실시간 시세, 웹소켓, 분봉, 파라미터 최적화, 다중 전략 비교, 공매도, 레버리지, 배당 반영, 서버·스케줄러.
 
 ## 2. 기본값 (바꾸려면 오케스트레이터가 사용자에게 확인)
+> **v2 덮어쓰기(2026-09-30)**: 유니버스 = 005930·000660 2종목 / 백테스트 구간 = 2026-08-31 ~ 2026-09-29(30일 고정) / 데이터 = 1분봉(5분봉으로 리샘플) + 2종목·KOSPI 일봉, 워밍업 없음 / 전략 = `intraday_breakout`(파라미터는 `strategy.md` 2절) / 종목당 자본 50% 상한. 초기 자본·비용·슬리피지·벤치마크·목표 수익률은 아래 표 그대로. 아래 표에서 유니버스·구간·수집 구간·최대 보유 종목 행은 v1 기록이다.
 | 항목 | 기본값 | 비고 |
 |---|---|---|
 | KIS 환경 | DEV(모의투자) | Phase 1 결론: 지원 추정(미검증). smoke test 실패 시 사용자에게 PROD read-only / 대체 소스(FinanceDataReader 1순위) 선택 요청 |
