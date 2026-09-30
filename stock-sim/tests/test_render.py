@@ -235,7 +235,7 @@ def test_example_kpi_values_shown(example, tmp_path):
         "41.67%",            # summary.win_rate_pct
         "5승 7패",
         "86.7분",            # summary.avg_hold_minutes
-        "일평균 청산 0.6건 · 체결 1.2건",
+        "일평균 청산 0.60건 · 체결 1.20건",  # 소수 2자리 표시(phase4-3 Low 2)
         "1,190,979,600원",   # summary.total_trade_value
         "9,586주",
         "24건",              # trade_value_share.center

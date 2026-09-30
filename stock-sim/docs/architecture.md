@@ -138,8 +138,17 @@ def fetch_minutes_day(client: KisClient, code: str, day: date,
     # (합친 원본 행, truncated). 페이지네이션 규칙은 아래 표.
 def read_minute_cache(path: Path) -> DataFrame | None          # 없거나 깨졌으면 None. 0행(헤더만)은 유효
 def load_minutes(code: str, days: list[date], cache_dir: Path, client: KisClient | None,
-                 time_label: str = "start") -> tuple[DataFrame, list[dict], dict]
-    # (여러 날을 이은 1분봉 DataFrame, data_issues, {"api_calls","cache_hits","empty_days"})
+                 time_label: str = "start", start_hour: str = "160000", max_pages: int = 6,
+                 defer_empty: bool = False) -> tuple[DataFrame, list[dict], dict]
+    # (여러 날을 이은 1분봉 DataFrame, data_issues, stats)
+    # stats = {"api_calls","cache_hits","empty_days","files","fetched_days","fetched_rows","pending_empty"}
+    # start_hour·max_pages: config data.minute_start_hour·data.minute_max_pages를 fetch_minutes_day로 그대로 전달
+    # defer_empty=True: 무데이터 표식을 쓰지 않고 stats["pending_empty"]([(code, day)])로 돌려준다
+    #   (load_all이 전 종목을 받은 뒤 write_empty_markers를 한 번 부른다. False면 이 함수가 바로 부른다)
+def write_empty_markers(cache_dir: Path, pending: list[tuple[str, date]], fetched_days: int,
+                        fetched_rows: int, env: str) -> None
+    # 6.2절 무데이터 표식(헤더만 있는 CSV)을 pending마다 쓴다. 단 fetched_days > 0이고 fetched_rows == 0이면
+    # (이번 실행에서 받은 분봉 행 합계 0 = 전 종목·전 일자 빈 응답) 표식을 하나도 쓰지 않고 KisUnsupportedError
 def trading_days(daily: dict[str, DataFrame], start: date, end: date) -> list[date]             # 순수
     # 종목 일봉 날짜의 합집합 중 [start, end]. 분봉을 요청할 후보 일자.
 def load_all(cfg: dict, period: dict, client: KisClient | None, refresh: bool = False
@@ -193,9 +202,11 @@ def calc_qty(alloc: int, price: int, buy_rate: float) -> int          # v1 그�
 
 def run_backtest(bars: dict[str, DataFrame], daily: dict[str, DataFrame],
                  auction: dict[str, dict[date, int]], params: dict, costs: dict,
-                 initial_cash: int) -> dict
+                 initial_cash: int, session: dict | None = None) -> dict
     # bars[code] = strategy.signals() 결과(4.3절 + 지표 + 플래그). daily[code] = 4.1절(전일 종가용)
     # auction[code] = strategy.auction_closes() 결과. params = cfg["strategy"]. costs = config.cost_rates()
+    # session = cfg["session"]({"open", "continuous_end"}). BAR_MISSING의 슬롯 수 계산에만 쓴다
+    #   (strategy.md 8절 3번 "session.open~continuous_end 슬롯 수"). None이면 09:00–15:20. 체결에는 영향 없음
     # 반환 {"fills": DataFrame(4.4절), "closed": DataFrame(4.5절), "days": DataFrame(4.6절 상태 컬럼),
     #       "blocks": dict(4.7절), "events": list[dict](4.8절)}
 ```
@@ -213,7 +224,9 @@ def daily_table(days: DataFrame, fills: DataFrame, closed: DataFrame, initial_ca
 def summarize(fills: DataFrame, closed: DataFrame, daily: DataFrame, bench: DataFrame,
               initial_cash: int) -> dict          # 5.3절 summary의 원값(비율은 반올림 없는 소수)
 def per_stock(fills: DataFrame, closed: DataFrame, universe: list[dict], initial_cash: int) -> list[dict]
-def weekly_trade_value(fills: DataFrame) -> list[dict]      # ISO 주별 거래대금(KPI 카드 막대용)
+def weekly_trade_value(fills: DataFrame, days: list[date] | None = None) -> list[dict]
+    # ISO 주별 거래대금(KPI 카드 막대용). 원소 {"start", "buy_value", "sell_value", "value"}, 주 오름차순
+    # days(거래일 목록)를 주면 거래 없는 주도 value 0으로 넣고 그 주 첫 거래일을 start로 쓴다(표시 전용)
 ```
 - v1의 `closed_trades`(backtest가 직접 만든다), `weekly_flow`(보유·현금이 항상 0·전액이라 뜻이 없다)는 제거한다.
 - `%` 변환과 자리수 맞춤은 `report.py`만 한다.
@@ -226,8 +239,9 @@ def nice_axis(v_min: float, v_max: float) -> tuple[float, float, list[float]]
 def build_alerts(summary: dict, stocks: list[dict], issues: list[dict], events: list[dict],
                  period: dict, params: dict) -> list[dict]
 def build_insights(summary: dict, stocks: list[dict], alerts: list[dict],
-                   equal_weight: float | None = None, equal_weight_count: int | None = None
-                   ) -> tuple[list[dict], dict]               # (insights 3개, next_action)
+                   equal_weight: float | None = None, equal_weight_count: int | None = None,
+                   days_label: int = 30) -> tuple[list[dict], dict]   # (insights 3개, next_action)
+    # days_label: strategy.md 11.2절 다음 조치 뒷 절 "{n}일 표본이므로 …"의 n. build_result가 cfg backtest.days를 넘긴다
 def build_result(cfg: dict, period: dict, bt: dict, daily: DataFrame, bench: DataFrame,
                  bench_info: dict, issues: list[dict], source_info: dict, generated_at: str) -> dict   # 순수
 def write_result(result: dict, path: Path) -> Path            # v1 그대로
@@ -549,7 +563,7 @@ v1에서 없앤 summary 필드: `unrealized_pnl`, `holding_count`, `max_position
 | `charts.trade_value_bars[]` | ISO 주별 거래대금(매수 + 매도). `label`(주 첫 거래일 MM-DD), `value`, `height_pct = value / 최댓값 × 100`, `color`: 75 이상 `#1428A0`, 50 이상 `#4B5CC0`, 25 이상 `#909BD6`, 그 밖 `#C2C8E8` |
 | `daily[].segments[]` | 길이 2, 순서 고정: `{"key":"gain","label":"수익","color":"#1428A0"}`, `{"key":"loss","label":"손실","color":"#B0472F"}`. `value`는 절댓값(수익일이면 gain에 `pnl`, loss는 0. 손실일은 반대). `height_pct = value / charts.daily_pnl.max_abs × 100`(최댓값 0이면 전부 0). **그리는 법**: 막대 영역을 위·아래 절반으로 나누고 gain은 위 절반에서 아래를 기준으로 `height_pct`%, loss는 아래 절반에서 위를 기준으로 `height_pct`%. 색이 곧 부호다 |
 | `daily[].show_label` | ISO 주의 첫 거래일만 `true`(축 라벨이 겹치지 않게). `daily[].halted`가 `true`면 템플릿이 그 날 라벨 옆에 "중단" 표시를 붙일 수 있다 |
-| `charts.daily_pnl` | `max_abs`, `win_days`(`pnl > 0`), `loss_days`(`pnl < 0`), `flat_days`(`pnl = 0`), `best{date, pnl}`, `worst{date, pnl}`(거래 0건이면 둘 다 null), `caption`: `"수익 {a}일, 손실 {b}일, 손익 없음 {c}일. 최대 수익 {±금액}원({날짜}), 최대 손실 {±금액}원({날짜})."` 수익일 또는 손실일이 없으면 해당 절을 뺀다. 거래 0건이면 `"거래가 없어 일별 손익이 없습니다."` |
+| `charts.daily_pnl` | `max_abs`, `win_days`(`pnl > 0`), `loss_days`(`pnl < 0`), `flat_days`(`pnl = 0`), `best{date, pnl}`, `worst{date, pnl}`: **`best`는 `pnl > 0`인 날 중 최대, `worst`는 `pnl < 0`인 날 중 최소**(같은 값이면 이른 날). 해당하는 날이 없으면 null(수익일이 없으면 `best` null, 손실일이 없으면 `worst` null. 거래 0건이면 둘 다 null), `caption`: `"수익 {a}일, 손실 {b}일, 손익 없음 {c}일. 최대 수익 {±금액}원({날짜}), 최대 손실 {±금액}원({날짜})."` 수익일 또는 손실일이 없으면 해당 절을 뺀다. 거래 0건이면 `"거래가 없어 일별 손익이 없습니다."` |
 | `trade_value_share` | 종목별 거래대금(매수 + 매도) 내림차순. `share_pct = value / total × 100`, `end_pct`는 누적(소수 2자리), 마지막은 100.0 고정. 색은 순서대로 `#1428A0`, `#4B5CC0`, `#7C9BFF`, `#909BD6`, `#C2C8E8`. `center = {"label": "체결 건수", "value": trade_count, "unit": "건"}`. 거래 0건이면 `segments: []`, `total: 0`, `conic_gradient: "conic-gradient(#DCE0E9 0% 100%)"` |
 | `trades[].in_table`, `trade_table` | `limit = 20`(고정). **가장 최근 체결 20건**만 `in_table = true`. `total = len(trades)`, `shown = min(total, limit)`, `truncated = total > limit`(= `flags.trades_truncated`). `caption`: 잘렸으면 `"최근 {shown}건 표시 · 전체 {total}건은 result.json의 trades[]에 있습니다."`, 아니면 `"전체 {total}건"`, 0건이면 `""`. **전체 체결과 청산 거래는 항상 result.json에 남긴다** |
 | `per_stock[].bar_pct`, `top_contributors.items[].bar_pct` | `|realized_pnl| / max|realized_pnl| × 100`(거래한 종목 기준). 같은 종목은 두 곳의 값이 같다 |
@@ -697,7 +711,7 @@ KIS DEV(모의투자) 도메인에서 <API 이름> 조회에 실패했습니다 
 | implementer | `config.yaml` | 3절 v2 스키마로 교체 |
 | | `src/stock_sim/config.py` | 기본값·검증 교체, `find_env_file` 추가, `resolve_period` 단순화, `cost_rates` 통과 |
 | | `src/stock_sim/kis_client.py` | `minute_prices` 추가, 기본 간격 0.5초. 나머지 유지 |
-| | `src/stock_sim/data.py` | 분봉 함수 6개 추가, `load_all` 반환 5개로 변경, `build_calendar`·`check_data` 제거 |
+| | `src/stock_sim/data.py` | 분봉 함수 7개 추가(`write_empty_markers` 포함), `load_all` 반환 5개로 변경, `build_calendar`·`check_data` 제거 |
 | | `src/stock_sim/strategy.py` | 전면 교체(1.4절) |
 | | `src/stock_sim/backtest.py` | `run_backtest` 교체. `rate_to_int`·`calc_cost`·`fill_price`·`calc_qty` 유지 |
 | | `src/stock_sim/metrics.py` | `daily_table`·`weekly_trade_value` 추가, `summarize`·`per_stock` 교체, `closed_trades`·`weekly_flow` 제거, 벤치마크 3개 유지 |

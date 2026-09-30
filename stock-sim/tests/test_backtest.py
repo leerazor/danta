@@ -186,6 +186,35 @@ def test_same_bar_orders_by_code_and_budget_per_code():
     assert list(bt["closed"]["id"]) == [1, 2]
 
 
+def _shifted_pair_run(limit):
+    """AAA = 손계산 봉, BBB = 같은 봉을 +25분 옮긴 입력. BBB 매수 체결 봉 = AAA 매도 체결 봉(09:50)."""
+    a = hand_bars5()
+    b = a.copy()
+    b["time"] = [f"{m // 60:02d}:{m % 60:02d}" for m in (strategy.to_minutes(t) + 25 for t in b["time"])]
+    params = {**HAND_PARAMS, "daily_loss_limit_pct": limit}
+    bars = {"AAA": strategy.signals(as_bars(a), params), "BBB": strategy.signals(as_bars(b), params)}
+    return backtest.run_backtest(bars, {}, {}, params, COSTS, CAPITAL, session=HAND_SESSION)
+
+
+def test_halt_by_sell_cancels_same_bar_pending_buy():
+    """strategy.md 4.6절 5번: 매도 체결로 halted가 되면 같은 봉의 대기 매수를 취소한다."""
+    bt = _shifted_pair_run(0.002)                             # AAA 손실 213,865 > 한도 200,000
+    assert [(x["time"], x["code"], x["side"]) for x in _fills(bt)] == [
+        ("09:25", "AAA", "BUY"), ("09:50", "AAA", "SELL")]   # 09:50 BBB 대기 매수(09:45 신호) 취소
+    assert _fills(bt)[1]["realized_pnl"] == -213_865
+    assert bool(bt["days"].iloc[0]["halted"]) is True
+    assert bt["blocks"]["halt"] >= 1
+
+    # 대조: 한도 1%(1,000,000)면 halted가 아니므로 같은 봉에서 AAA 매도 뒤 BBB 매수가 체결된다
+    bt2 = _shifted_pair_run(0.01)
+    f2 = _fills(bt2)
+    assert [(x["time"], x["code"], x["side"]) for x in f2[:3]] == [
+        ("09:25", "AAA", "BUY"), ("09:50", "AAA", "SELL"), ("09:50", "BBB", "BUY")]
+    assert (f2[2]["signal_time"], f2[2]["qty"], f2[2]["price"]) == ("09:45", 496, 100_700)
+    assert bool(bt2["days"].iloc[0]["halted"]) is False
+    assert bt2["blocks"]["halt"] == 0
+
+
 def test_max_entries_per_day():
     params = {**HAND_PARAMS, "cooldown_bars": 0, "max_entries_per_symbol_per_day": 1}
     bt = run_hand(params=params)

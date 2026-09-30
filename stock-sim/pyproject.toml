@@ -1,7 +1,7 @@
 [project]
 name = "stock-sim"
 version = "0.1.0"
-description = "KIS 과거 일봉 기반 주식 자동매매 백테스트 시뮬레이션 (주문·계좌 API 미사용)"
+description = "KIS 과거 분봉 기반 단타(장중) 주식 자동매매 백테스트 시뮬레이션 (주문·계좌 API 미사용)"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "requests",
