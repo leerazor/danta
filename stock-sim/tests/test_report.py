@@ -5,8 +5,8 @@ import re
 
 import pytest
 
-from helpers import CAPITAL, COSTS, DOCS, SYN_END, syn_run
-from stock_sim import backtest, data, report
+from helpers import BT_START, CAPITAL, COSTS, DOCS, HAND_END, HAND_START, SYN_END, run_hand, syn_run
+from stock_sim import backtest, data, metrics, report
 
 EXAMPLE = json.loads((DOCS / "result.example.json").read_text(encoding="utf-8"))
 GENERATED_AT = "2026-09-30T09:15:00+09:00"
@@ -111,6 +111,10 @@ def test_signs_match_values(result, empty_result):
             assert s[f"{name}_sign"] == sign(s[name])
         for name in ("total_return", "benchmark_return", "excess_return", "equal_weight_return"):
             assert s[f"{name}_sign"] == sign(s[f"{name}_pct"])
+        assert s["excess_vs_equal_weight_sign"] == sign(s["excess_vs_equal_weight_pct"])
+        if s["equal_weight_return_pct"] is not None:
+            assert s["excess_vs_equal_weight_pct"] == pytest.approx(
+                s["total_return_pct"] - s["equal_weight_return_pct"], abs=2e-4)
         assert s["mdd_sign"] == sign(s["mdd_pct"]) and s["mdd_pct"] <= 0
         for p in res["positions"]:
             assert p["sign"] == sign(p["unrealized_pnl"])
@@ -118,9 +122,14 @@ def test_signs_match_values(result, empty_result):
             assert t["sign"] == sign(t["realized_pnl"])
         for st in res["per_stock"]:
             assert st["sign"] == sign(st["total_pnl"])
+            assert st["realized_pnl_sign"] == sign(st["realized_pnl"])
         for it in res["top_contributors"]["items"]:
             assert it["sign"] == sign(it["pnl"])
-        assert res["target"]["sign"] == sign(res["target"]["actual_return_pct"])
+        t = res["target"]
+        assert t["sign"] == sign(t["actual_return_pct"])
+        assert t["current_return_sign"] == sign(t["current_return_pct"]) == s["total_return_sign"]
+        assert t["current_return_pct"] == t["actual_return_pct"] == s["total_return_pct"]
+        assert t["gap_pct"] == pytest.approx(t["current_return_pct"] - t["target_return_pct"], abs=2e-4)
 
 
 def test_stack_and_donut_sums(result, empty_result):
@@ -152,7 +161,7 @@ def test_summary_is_consistent_with_rows(result):
     assert len(result["equity_curve"]) == len(result["benchmark"]) == result["meta"]["period"]["trading_days"] == 20
     assert [e["date"] for e in result["equity_curve"]] == [b["date"] for b in result["benchmark"]]
     assert all(e["cash"] >= 0 for e in result["equity_curve"])
-    assert result["meta"]["is_example"] is False and result["schema_version"] == "1.0"
+    assert result["meta"]["is_example"] is False and result["schema_version"] == "1.1"
     assert result["meta"]["period"]["start"] == "2026-08-31" and result["meta"]["period"]["end"] == SYN_END.isoformat()
     assert result["meta"]["costs"] == {"buy_cost_pct": 0.015, "sell_cost_pct": 0.215, "slippage_pct": 0.0}
     assert len(result["meta"]["disclaimers"]) == 6
@@ -200,6 +209,14 @@ def test_per_stock_order_and_statuses(result):
     assert max(s["bar_pct"] for s in traded) == 100.0
     top = result["top_contributors"]["items"]
     assert [i["rank"] for i in top] == list(range(1, len(top) + 1)) and len(top) <= 5
+    # 개정 1.1: |total_pnl| 내림차순(동률 종목코드순), bar_pct 는 per_stock 과 같은 값
+    expected = sorted(traded, key=lambda s: (-abs(s["total_pnl"]), s["code"]))[:5]
+    assert [i["code"] for i in top] == [s["code"] for s in expected]
+    by_code = {s["code"]: s for s in result["per_stock"]}
+    assert all(i["bar_pct"] == by_code[i["code"]]["bar_pct"] and i["pnl"] == by_code[i["code"]]["total_pnl"]
+               for i in top)
+    assert top[0]["bar_pct"] == 100.0
+    assert [i["bar_pct"] for i in top] == sorted((i["bar_pct"] for i in top), reverse=True)
 
 
 def test_alerts_and_insights(result):
@@ -207,18 +224,22 @@ def test_alerts_and_insights(result):
     levels = [a["level"] for a in alerts]
     assert levels == sorted(levels, key=lambda lv: 0 if lv == "warn" else 1)      # warn 먼저
     missing = [a for a in alerts if a["code"] == "DATA_MISSING"][0]
-    assert missing["title"].startswith("가상제외 데이터 ") and missing["title"].endswith("일 결측.")
-    assert missing["color"] == "#C98A2E" and "유니버스에서 제외" in missing["detail"]
+    assert missing["title"] == "가상제외 데이터 없음: 유니버스에서 제외"
+    assert missing["color"] == "#C98A2E" and missing["detail"] == "000009" and missing["date"] is None
     low = alerts[-1]
     assert low["code"] == "LOW_SAMPLE" and low["level"] == "info" and low["color"] == "#1428A0"
     assert low["title"] == "1개월(20거래일) 표본은 통계적 의미가 약합니다."
     assert low["detail"].startswith("리밸런싱 5회 · 청산 거래 ")
     assert result["flags"]["only_low_sample_alert"] is False
     assert [i["no"] for i in result["insights"]] == ["01", "02", "03"]
-    assert [i["title"] for i in result["insights"]] == ["벤치마크 대비", "종목 기여", "거래·위험"]
-    assert "KOSPI(" in result["insights"][0]["detail"] and "체결" in result["insights"][2]["detail"]
+    assert [i["title"] for i in result["insights"]] == ["벤치마크 비교", "손익 분해", "리스크"]
+    assert result["insights"][0]["detail"].startswith("기간 수익률 ")
+    assert "유니버스 4종목 동일가중(" in result["insights"][0]["detail"]
+    assert result["insights"][2]["detail"].startswith("최대 낙폭(MDD) ")
     assert result["next_action"]["label"] == "다음 조치"
-    assert result["next_action"]["text"].startswith("리스크 알림 ")
+    # 데이터 품질 알림(DATA_MISSING 1건)이 있으므로 10.2절 2번
+    assert result["next_action"]["text"] == (
+        "수치를 해석하기 전에 점검 필요의 데이터 알림 1건을 먼저 확인하세요. " + report.NEXT_SUFFIX)
 
 
 def test_empty_case_5_6(empty_result):
@@ -241,7 +262,12 @@ def test_empty_case_5_6(empty_result):
     assert r["allocation"]["center"]["value_pct"] == 0.0
     assert all(st["status"] == "no_trade" and st["win_rate_pct"] is None for st in r["per_stock"])
     assert r["insights"][1]["detail"] == "백테스트 기간에 체결된 거래가 없어 전 기간 현금을 보유했습니다."
-    assert r["insights"][2]["detail"] == "거래가 없어 승률과 MDD는 의미가 없습니다."
+    assert r["insights"][2]["detail"] == "거래가 없어 최대 낙폭(MDD)은 0.00%입니다."
+    assert r["insights"][0]["detail"].startswith("기간 수익률 0.00%, KOSPI(")
+    assert r["next_action"]["text"] == "점검 필요의 데이터 알림과 백테스트 구간 설정을 먼저 확인하세요."
+    assert r["top_contributors"]["note"] == "거래가 없어 손익 기여 종목이 없습니다."
+    assert r["target"]["caption"] == (
+        "목표 +2.00%에 2.00%p 못 미쳤습니다(현재 0.00%). 목표 평가금액까지 2,000,000원 부족.")
     assert r["charts"]["sparklines"]["equity"].split(" ")[0] == "0.0,22.0"
     assert r["target"]["progress_pct"] == 0.0 and r["target"]["achieved"] is False
 
@@ -268,16 +294,24 @@ def test_alert_rules_from_events():
         "MDD_BREACH", "LOSS_STREAK", "UNDERPERFORM", "DATA_MISSING", "PRICE_ANOMALY", "UNTRADABLE_SKIP",
         "QTY_ZERO_SKIP", "CONCENTRATION", "BENCHMARK_BASE_FALLBACK", "LOW_SAMPLE"]
     by = {a["code"]: a for a in alerts}
-    assert by["MDD_BREACH"]["title"] == "MDD -6.12%가 임계 −5.00%를 넘었습니다(2026-09-29)."
-    assert by["MDD_BREACH"]["color"] == "#B0472F" and "시작" in by["MDD_BREACH"]["detail"]
-    assert by["LOSS_STREAK"]["title"] == "청산 거래가 3회 연속 손실입니다."
-    assert by["UNDERPERFORM"]["title"] == "KOSPI 대비 -2.50%p 하회했습니다."
-    assert by["DATA_MISSING"]["title"] == "가상전자 데이터 2일 결측."
-    assert by["PRICE_ANOMALY"]["title"] == "가상전자 2026-09-29 등락 +35.00%: 수정주가 확인 필요."
-    assert by["UNTRADABLE_SKIP"]["title"] == "가상전자 2026-09-29 매도 불가로 건너뜀."
-    assert by["QTY_ZERO_SKIP"]["title"] == "가상전자 1주 가격이 배분금액을 넘어 매수하지 못했습니다."
-    assert "21,000,000원" in by["QTY_ZERO_SKIP"]["detail"] and "20,000,000원" in by["QTY_ZERO_SKIP"]["detail"]
-    assert by["CONCENTRATION"]["title"] == "가상전자 비중 45.50%로 편중."
+    fields = {c: (a["title"], a["detail"], a["date"]) for c, a in by.items()}
+    assert fields["MDD_BREACH"] == ("MDD -6.12%, 임계 -5.00% 초과", "고점 초기 자본 → 저점 2026-09-29", None)
+    assert by["MDD_BREACH"]["color"] == "#B0472F"
+    assert fields["LOSS_STREAK"] == ("청산 거래 3회 연속 손실", "임계 3회", None)
+    assert fields["UNDERPERFORM"] == ("KOSPI보다 2.50%p 낮았습니다.", "전략 -3.00% · KOSPI -0.50%", None)
+    assert fields["DATA_MISSING"] == ("가상전자 데이터 2일 결측", "000001", None)
+    assert fields["PRICE_ANOMALY"] == ("가상전자 등락 +35.00%: 수정주가 확인 필요", "000001 · 전일 종가 대비",
+                                       "2026-09-29")
+    assert fields["UNTRADABLE_SKIP"] == ("가상전자 매도 불가로 건너뜀",
+                                         "000001 · 거래정지·결측 또는 가격제한폭 시가", "2026-09-29")
+    assert fields["QTY_ZERO_SKIP"] == ("가상전자 1주 가격이 배분금액을 넘어 매수하지 못했습니다.",
+                                       "000001 · 체결가 21,000,000원 · 배분금액 20,000,000원", "2026-09-29")
+    assert fields["CONCENTRATION"] == ("가상전자 비중 45.50%로 편중", "000001", None)
+    assert fields["BENCHMARK_BASE_FALLBACK"] == ("벤치마크 기준가를 직전 종가로 대체했습니다.", "", None)
+    for a in alerts:                                         # 10.3절: title 에 날짜 없음, 한 알림에 날짜 한 번
+        assert not re.search(r"\d{4}-\d{2}-\d{2}", a["title"])
+        text = a["detail"] + " " + (a["date"] or "")
+        assert all(text.count(d) == 1 for d in re.findall(r"\d{4}-\d{2}-\d{2}", text))
     assert [a["level"] for a in alerts] == ["warn"] * 6 + ["info"] * 4
 
 

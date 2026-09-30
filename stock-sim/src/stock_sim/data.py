@@ -4,11 +4,11 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, timedelta
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from stock_sim.kis_client import KisClient, KisUnsupportedError, unsupported_message
@@ -73,14 +73,14 @@ def _normalize(rows: list[dict], fields: dict[str, str], integer_prices: bool) -
     if integer_prices:
         for col in PRICE_COLS:
             vals = df[col].fillna(0.0).astype("float64")
-            if len(vals) and bool((vals != np.floor(vals)).any()):
+            if len(vals) and bool(((vals % 1) != 0).any()):
                 non_integer = True
-            df[col] = np.floor(vals + 0.5).astype("int64")  # half-up, 원 단위
+            df[col] = ((vals + 0.5) // 1).astype("int64")  # half-up(floor(x + 0.5)), 원 단위
     else:
         for col in PRICE_COLS:
             df[col] = df[col].astype("float64")
     for col in ("volume", "value"):
-        df[col] = np.floor(df[col].fillna(0.0).astype("float64") + 0.5).astype("int64")
+        df[col] = ((df[col].fillna(0.0).astype("float64") + 0.5) // 1).astype("int64")
     df.attrs["non_integer_price"] = non_integer
     return df
 
@@ -119,6 +119,34 @@ def _write_cache(df: pd.DataFrame, path: Path) -> None:
     df.to_csv(path, index=False, encoding="utf-8", date_format="%Y-%m-%d")
 
 
+def issues_path(path: Path) -> Path:
+    """캐시 CSV 옆의 보조 파일(`<캐시명>.issues.json`). 수집 때 발견한 데이터 이슈를 남긴다."""
+    path = Path(path)
+    return path.with_name(f"{path.stem}.issues.json")
+
+
+def _write_issues(path: Path, non_integer: bool) -> None:
+    """비정수 가격이 있었으면 보조 파일을 쓰고, 없으면 예전 보조 파일을 지운다."""
+    side = issues_path(path)
+    if non_integer:
+        side.write_text(json.dumps({"non_integer_price": True}, ensure_ascii=False),
+                        encoding="utf-8")
+    elif side.exists():
+        side.unlink()
+
+
+def _read_issues(path: Path) -> dict:
+    side = issues_path(path)
+    if not side.is_file():
+        return {}
+    try:
+        loaded = json.loads(side.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        log.warning("이슈 보조 파일을 읽지 못했습니다: %s", side.name)
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def _load(kind: str, code: str, start: date, end: date, cache_dir: Path,
           client: KisClient | None, refresh: bool) -> pd.DataFrame:
     is_stock = kind == "stock"
@@ -127,7 +155,9 @@ def _load(kind: str, code: str, start: date, end: date, cache_dir: Path,
         cached = read_cache(path, integer_prices=is_stock)
         if cached is not None:
             log.info("캐시 적중: %s (%d행)", path.name, len(cached))
-            cached.attrs.update(from_cache=True, non_integer_price=False, truncation=False)
+            saved = _read_issues(path)
+            cached.attrs.update(from_cache=True, truncation=False,
+                                non_integer_price=bool(saved.get("non_integer_price", False)))
             return cached
     if client is None:
         raise FileNotFoundError(f"캐시 파일이 없고 클라이언트도 없습니다: {path.name}")
@@ -145,8 +175,15 @@ def _load(kind: str, code: str, start: date, end: date, cache_dir: Path,
     df = df.sort_values("date", kind="stable").drop_duplicates("date", keep="last")
     lo, hi = pd.Timestamp(start), pd.Timestamp(end)
     df = df[(df["date"] >= lo) & (df["date"] <= hi)].reset_index(drop=True)
-    if len(df) > 0:
+    if len(df) > 0 and truncation:
+        # 잘렸을 수 있는 데이터는 캐시하지 않는다: 다음 실행에서 다시 받고 다시 경고한다.
+        log.warning("잘림 의심 데이터라 캐시에 저장하지 않습니다: %s", path.name)
+        for stale in (path, issues_path(path)):       # --refresh 전의 같은 이름 캐시도 남기지 않는다
+            if stale.exists():
+                stale.unlink()
+    elif len(df) > 0:
         _write_cache(df, path)
+        _write_issues(path, non_integer)
         log.info("캐시 저장: %s (%d행)", path.name, len(df))
     df.attrs.update(from_cache=False, non_integer_price=non_integer, truncation=truncation)
     return df

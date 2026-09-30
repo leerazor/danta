@@ -442,6 +442,7 @@ output:
 - (개정 1.1) `return_sign`은 두지 않는다. `return_pct = total_pnl / Σ(매수 거래대금 + 매수 비용)`(strategy.md 7절)이고 분모가 항상 양수라 **`return_pct`의 부호는 `sign`과 항상 같다.** 수익률 열의 색도 `sign`으로 고른다(`return_pct`가 null이면 `total_pnl`도 0이라 `sign`은 `"zero"`).
 
 `alerts.level`: `"warn"` / `"info"`(strategy.md 10.3절). `color`: `MDD_BREACH`·`LOSS_STREAK`·`UNDERPERFORM`은 `#B0472F`, 그 밖의 warn은 `#C98A2E`, info는 `#1428A0`. 정렬은 warn 먼저, 그 안에서 10.3절 표 순서. `title`은 10.3절 메시지 틀, `detail`은 보조 설명(종목코드·날짜 등, 빈 문자열 가능), `date`는 없으면 null.
+- (개정 1.1, strategy.md 10.3절) **날짜는 한 알림에서 한 곳에만 쓴다.** `title`에 날짜를 넣지 않는다. 날짜가 하나면 `date`에, 구간(두 날짜)이면 `detail`에 쓰고 `date`는 null로 둔다(예: `MDD_BREACH`는 detail `"고점 2026-09-09 → 저점 2026-09-29"`, date null). `date`를 쓰는 코드는 `PRICE_ANOMALY`(해당일)·`UNTRADABLE_SKIP`·`QTY_ZERO_SKIP`(체결일)뿐이고 나머지는 null이다. 템플릿은 `detail`과 `date`를 그대로 보여 주기만 하며, 이 규칙대로 채우면 같은 날짜가 두 번 나오지 않는다.
 
 ### 5.4 대시보드 섹션 ↔ JSON 필드 (CLAUDE.md 8절과 1:1)
 | # | 샘플 섹션 | 시뮬레이션 대시보드 | JSON 필드 |
@@ -455,7 +456,7 @@ output:
 | 7 | 상위 팀 바 | 종목별 손익 기여 상위 5(손익 절댓값 기준 — 이익·손실 종목 모두 포함) | `top_contributors.items[]`(`name`, `pnl`, `sign`, `bar_pct`), `top_contributors.note`. (개정 1.1) 선정·막대·문구 규칙은 5.5절 |
 | 8 | 분석 요약(다크 패널) | 자동 인사이트 3개 + 다음 조치 | `insights[]`(`no`, `title`, `detail`), `next_action.label`, `next_action.text`. (개정 1.1) 문장의 재료로 `summary.excess_vs_equal_weight_pct`가 추가됐다. 문장은 strategy.md 10절을 따른다 |
 | 9 | 상세 테이블 | 종목별 상세 | `per_stock[]`(`name`, `status_label`, `trade_count`, `win_rate_pct`, `realized_pnl`, `realized_pnl_sign`, `total_pnl`, `return_pct`, `sign`). 색: 실현손익 열은 `realized_pnl_sign`, 총손익·수익률 열과 막대는 `sign`(둘 다 `sign_color`). `bar_pct`는 막대를 그릴 때 쓴다. **선택(종목 셀 보조줄)**: `trade_value`, `trade_volume` — 열로 두지 않고, 표시한다면 종목명 아래 보조줄에 넣는다(개정 1.1, 리뷰 phase4-1 L5) |
-| 10 | 점검 필요 | 리스크 알림 | `alerts[]`(`title`, `detail`, `color`, `level`), `flags.only_low_sample_alert` |
+| 10 | 점검 필요 | 리스크 알림 | `alerts[]`(`title`, `detail`, `date`, `color`, `level`), `flags.only_low_sample_alert`. (개정 1.1) `date`가 null이 아니면 그대로 표시한다. `title`에는 날짜가 없고 구간 날짜는 `detail`에 있다(5.3절 alerts 규칙) |
 | 11 | 연간 목표 진척 | 목표 수익률 대비 진척 | `target`(`target_return_pct`, `actual_return_pct`, `progress_pct`, `bar_segments[]`, `gap_amount`, `caption`). (개정 1.1) 오른쪽 큰 숫자는 진척률이 아니라 **현재 수익률** `target.current_return_pct`(`signed_pct`, 색은 `current_return_sign`에 `sign_color`)다. 보조 수치 `target.gap_pct`(%p), `target.gap_amount`. 문구는 `target.caption`을 그대로 출력한다(규칙은 5.5절) |
 | 12 | (추가) 상세 테이블과 같은 카드 스타일 | 매매 내역 표 | `trades[]`, 체결 순(배열 순서 그대로). 열 9개: 체결일 `date` / 종목 `name`(보조 `code`) / 매수·매도 `side_label` / 수량 `qty` / 체결가 `price`(`won`) / 금액 `amount`(`won`) / 비용 `cost`(`won`) / 실현손익 `realized_pnl`(`signed_won`, 색은 `trades[].sign`에 `sign_color`) / 사유 `reason`. 매수 행은 `realized_pnl`이 null이라 필터가 "–"를 내고 `sign`은 `"zero"`다. 전부 기존 `trades[]` 필드이며 추가 필드는 없다. 거래 0건이면 `flags.no_trades`로 "거래 없음"(5.6절). 위치는 종목별 상세 표 아래(개정 1.1, 리뷰 phase4-1 M1·UX C-3) |
 | + | (샘플에 없음) | 한계 고지(하단) | `meta.disclaimers[]`. CLAUDE.md 1절이 한계 고지를 요구하므로 데이터는 담는다. 배치는 dashboard-builder가 샘플 카드 스타일 안에서 정한다 |
@@ -489,7 +490,7 @@ output:
 | `target.gap_pct` | (개정 1.1) `현재 수익률 − 목표 수익률`(%p, 부호 있음, 소수 4자리). 미달이면 음수, 달성이면 0 이상. 예: −0.84 − 2.00 = −2.84 |
 | `target.gap_amount` | 기존 정의 그대로 `max(target_equity − final_equity, 0)`: 목표 평가금액까지 **부족한 금액**(달성하면 0). 초과 금액은 필드로 두지 않고 `caption` 문장 안에만 넣는다(`final_equity − target_equity`) |
 | `target.caption` | (개정 1.1, UX P1-4) 미달(`achieved == false`): `"목표 +2.00%에 2.84%p 못 미쳤습니다(현재 -0.84%). 목표 평가금액까지 2,838,856원 부족."` — 순서대로 `target_return_pct`(부호 포함 2자리), `|gap_pct|`(2자리 + `%p`), `current_return_pct`(부호 포함 2자리), `gap_amount`(콤마). 현재 수익률이 양수여도 미달이면 같은 틀이다. 달성(`achieved == true`): `"목표 +2.00%를 0.50%p 넘었습니다(현재 +2.50%). 목표 평가금액을 500,000원 초과."` **금지: "목표 +2.00% 대비 −41.94% 달성"처럼 진척률(`progress_raw_pct`)을 문장에 넣는 표현.** 음수 진척률은 뜻이 통하지 않으므로 달성률 문구 자체를 쓰지 않는다. `progress_raw_pct`·`progress_pct`는 막대 폭 용도로만 남는다 |
-| `insights`, `next_action` | strategy.md 10.1·10.2절 문장 틀. `title`은 고정: `"벤치마크 대비"`, `"종목 기여"`, `"거래·위험"`. `detail`이 10.1절 문장. (개정 1.1) 동일가중 비교 문장에 쓸 수치로 `summary.excess_vs_equal_weight_pct`를 제공한다. 이 문서는 필드만 정하고, 인사이트·다음 조치 문장은 strategy.md 10절을 따른다 |
+| `insights`, `next_action` | strategy.md 10.1·10.2절 문장 틀. `title`은 고정: `"벤치마크 비교"`, `"손익 분해"`, `"리스크"`(개정 1.1, strategy.md 10.1절. 종전 "벤치마크 대비"/"종목 기여"/"거래·위험"은 쓰지 않는다). `detail`이 10.1절 문장. (개정 1.1) 동일가중 비교 문장에 쓸 수치로 `summary.excess_vs_equal_weight_pct`를 제공한다. 이 문서는 필드만 정하고, 인사이트·다음 조치 문장은 strategy.md 10절을 따른다 |
 
 ### 5.6 빈 경우의 표현
 | 상황 | JSON | 템플릿 표시 |

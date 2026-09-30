@@ -57,10 +57,10 @@ def benchmark_curve(benchmark: pd.DataFrame, days: list[date], capital: int
             {"base_price": float(base), "base_kind": kind})
 
 
-def equal_weight_return(prices: dict[str, pd.DataFrame], days: list[date]) -> float | None:
-    """유니버스 동일가중 buy&hold: 평균_i(C_i(dn) / O_i(d1)) − 1. d1에 유효 봉이 있는 종목만."""
+def _equal_weight_ratios(prices: dict[str, pd.DataFrame], days: list[date]) -> list[float]:
+    """종목별 C_i(dn) / O_i(d1). d1에 유효 봉이 있는 종목만."""
     if not days:
-        return None
+        return []
     d1, dn = days[0], days[-1]
     ratios = []
     for df in prices.values():
@@ -76,7 +76,18 @@ def equal_weight_return(prices: dict[str, pd.DataFrame], days: list[date]) -> fl
                 last = bars[d][1]
         if last:
             ratios.append(last / first[0])
+    return ratios
+
+
+def equal_weight_return(prices: dict[str, pd.DataFrame], days: list[date]) -> float | None:
+    """유니버스 동일가중 buy&hold: 평균_i(C_i(dn) / O_i(d1)) − 1. d1에 유효 봉이 있는 종목만."""
+    ratios = _equal_weight_ratios(prices, days)
     return sum(ratios) / len(ratios) - 1.0 if ratios else None
+
+
+def equal_weight_count(prices: dict[str, pd.DataFrame], days: list[date]) -> int:
+    """동일가중 계산에 들어간 종목 수(strategy.md 10.1절 ①의 n)."""
+    return len(_equal_weight_ratios(prices, days))
 
 
 def closed_trades(trades: pd.DataFrame) -> pd.DataFrame:
@@ -99,10 +110,12 @@ def closed_trades(trades: pd.DataFrame) -> pd.DataFrame:
 
 
 def _drawdown(equities: list[int], days: list[date], capital: int) -> dict:
-    peak, peak_date = capital, None           # 고점 후보에 E0 포함(날짜 없음)
+    # 고점 후보에 E0 포함(날짜 없음). 저점일은 같은 낙폭 중 가장 이른 날(<),
+    # 고점일은 같은 평가액 중 저점일에 가장 가까운 날(>=)이다(strategy.md 10.1절 ③).
+    peak, peak_date = capital, None
     mdd, mdd_peak, mdd_trough, series = 0.0, None, None, []
     for d, e in zip(days, equities):
-        if e > peak:
+        if e >= peak:
             peak, peak_date = e, d
         dd = e / peak - 1.0
         series.append(dd)

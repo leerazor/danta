@@ -124,62 +124,95 @@ def _bar_color(height_pct: float) -> str:
     return "#909BD6" if height_pct >= 25 else "#C2C8E8"
 
 
-# ---- 알림·인사이트 ----------------------------------------------------------
+# ---- 알림·인사이트 (strategy.md 10절) ------------------------------------------
+DATA_QUALITY_CODES = ("DATA_MISSING", "PRICE_ANOMALY", "NON_INTEGER_PRICE", "TRUNCATION_SUSPECT")
+NEXT_SUFFIX = "1개월 표본이므로 전략 변경은 구간을 늘려 본 뒤 판단하세요."
+
+
+def _disp(v: float) -> float:
+    """소수 2자리 표시값(10.0절 4번: 비율 문장의 분기는 표시값으로 판정). -0.0은 0.0."""
+    d = float(f"{v:.2f}")
+    return 0.0 if d == 0 else d
+
+
+def _upct(v: float) -> str:
+    """부호 없는 절댓값 2자리('{x}%p'의 x)."""
+    return f"{abs(_disp(v)):.2f}"
+
+
+def _label(item: dict) -> str:
+    """종목명, 없으면 종목코드(10.0절 6번)."""
+    return item.get("name") or item["code"]
+
+
+def _mdd_span(summary: dict) -> tuple[str, str]:
+    """(고점일, 저점일). 고점이 E0이면 '초기 자본'(10.1절 ③)."""
+    return _d(summary["mdd_peak_date"]) or "초기 자본", _d(summary["mdd_trough_date"]) or ""
+
+
+def _top_abs(items: list[dict], key: str, k: int = 2) -> list[dict]:
+    """절댓값 내림차순, 동률은 종목코드 오름차순."""
+    return sorted(items, key=lambda x: (-abs(x[key]), x["code"]))[:k]
+
+
 def build_alerts(summary: dict, stocks: list[dict], positions: list[dict],
                  issues: list[dict], events: list[dict], period: dict) -> list[dict]:
-    """strategy.md 10.3절. warn 먼저, 그 안에서 표의 순서."""
-    names = {s["code"]: s["name"] for s in stocks}
-    raw: list[tuple[str, str, str, str | None]] = []       # (code, title, detail, date)
+    """strategy.md 10.3절. title에는 날짜를 넣지 않고, 날짜 하나는 date, 구간은 detail에 쓴다."""
+    names = {s["code"]: _label(s) for s in stocks}
+    raw: list[tuple[str, str, str, str | None, str]] = []   # (code, title, detail, date, stock)
 
     def nm(code):
         return names.get(code, code)
 
     if summary["mdd"] <= MDD_LIMIT:
-        trough = _d(summary["mdd_trough_date"])
-        raw.append(("MDD_BREACH", f"MDD {_spct(summary['mdd'] * 100)}가 임계 −5.00%를 넘었습니다({trough}).",
-                    f"고점 {_d(summary['mdd_peak_date']) or '시작'} → 저점 {trough}", trough))
+        peak, trough = _mdd_span(summary)
+        raw.append(("MDD_BREACH", f"MDD {_spct(summary['mdd'] * 100)}, 임계 -5.00% 초과",
+                    f"고점 {peak} → 저점 {trough}", None, ""))
     if summary["max_loss_streak"] >= STREAK_LIMIT:
-        raw.append(("LOSS_STREAK", f"청산 거래가 {summary['max_loss_streak']}회 연속 손실입니다.", "", None))
+        raw.append(("LOSS_STREAK", f"청산 거래 {summary['max_loss_streak']}회 연속 손실", "임계 3회", None, ""))
     if summary["excess_return"] <= UNDERPERFORM_LIMIT:
-        raw.append(("UNDERPERFORM", f"KOSPI 대비 {_spct(summary['excess_return'] * 100)}p 하회했습니다.",
-                    f"전략 {_spct(summary['total_return'] * 100)} · KOSPI {_spct(summary['benchmark_return'] * 100)}", None))
+        raw.append(("UNDERPERFORM", f"KOSPI보다 {_upct(summary['excess_return'] * 100)}%p 낮았습니다.",
+                    f"전략 {_spct(summary['total_return'] * 100)} · KOSPI "
+                    f"{_spct(summary['benchmark_return'] * 100)}", None, ""))
     if summary["trade_count"] == 0:
-        raw.append(("NO_TRADES", "백테스트 기간에 거래가 없습니다.", "", None))
+        raw.append(("NO_TRADES", "백테스트 기간에 거래가 없습니다.", "", None, ""))
     for ev in list(issues) + list(events):
-        code, stock, day = ev["code"], ev.get("stock"), _d(ev.get("date"))
+        code, stock, day = ev["code"], ev.get("stock") or "", _d(ev.get("date"))
         if code == "DATA_MISSING":
-            detail = (f"{stock} · 조회 결과 0건 · 유니버스에서 제외" if ev.get("excluded")
-                      else f"{stock} · 거래일 달력 대비 결측")
-            raw.append((code, f"{nm(stock)} 데이터 {int(ev['value'])}일 결측.", detail, None))
+            title = (f"{nm(stock)} 데이터 없음: 유니버스에서 제외" if ev.get("excluded")
+                     else f"{nm(stock)} 데이터 {int(ev['value'])}일 결측")
+            raw.append((code, title, stock, None, stock))
         elif code == "PRICE_ANOMALY":
-            raw.append((code, f"{nm(stock)} {day} 등락 {_spct(ev['value'] * 100)}: 수정주가 확인 필요.",
-                        f"{stock} · 전일 종가 대비", day))
+            raw.append((code, f"{nm(stock)} 등락 {_spct(ev['value'] * 100)}: 수정주가 확인 필요",
+                        f"{stock} · 전일 종가 대비", day, stock))
         elif code == "UNTRADABLE_SKIP":
             side = "매수" if ev.get("side") == "BUY" else "매도"
-            raw.append((code, f"{nm(stock)} {day} {side} 불가로 건너뜀.",
-                        f"{stock} · 거래정지·결측 또는 가격제한폭 시가", day))
+            raw.append((code, f"{nm(stock)} {side} 불가로 건너뜀",
+                        f"{stock} · 거래정지·결측 또는 가격제한폭 시가", day, stock))
         elif code == "NON_INTEGER_PRICE":
-            raw.append((code, f"{nm(stock)} 가격에 정수가 아닌 값이 있어 원 단위로 반올림했습니다.", f"{stock}", None))
+            raw.append((code, f"{nm(stock)} 가격에 정수가 아닌 값: 원 단위로 반올림", stock, None, stock))
         elif code == "TRUNCATION_SUSPECT":
-            raw.append((code, f"{nm(stock)} 응답 건수가 상한에 닿아 데이터가 잘렸을 수 있습니다.", f"{stock}", None))
+            is_index = stock.startswith("IDX")
+            label, detail = ("KOSPI 지수", stock[3:]) if is_index else (nm(stock), stock)
+            raw.append((code, f"{label} 응답 건수가 상한에 닿음: 데이터 잘림 확인 필요", detail, None, stock))
         elif code == "QTY_ZERO_SKIP":
             alloc = (ev.get("extra") or {}).get("alloc")
-            detail = f"{stock} · {day} · 체결가 {int(ev['value']):,}원"
+            detail = f"{stock} · 체결가 {int(ev['value']):,}원"
             detail += f" · 배분금액 {int(alloc):,}원" if alloc is not None else ""
-            raw.append((code, f"{nm(stock)} 1주 가격이 배분금액을 넘어 매수하지 못했습니다.", detail, day))
+            raw.append((code, f"{nm(stock)} 1주 가격이 배분금액을 넘어 매수하지 못했습니다.", detail, day, stock))
         elif code == "BENCHMARK_BASE_FALLBACK":
-            raw.append((code, "벤치마크 기준가를 직전 종가로 대체했습니다.", "지수 시가 없음", None))
+            raw.append((code, "벤치마크 기준가를 직전 종가로 대체했습니다.", "", None, ""))
     for pos in positions:
         if pos["weight_pct"] > CONCENTRATION_LIMIT:
-            raw.append(("CONCENTRATION", f"{pos['name']} 비중 {pos['weight_pct']:.2f}%로 편중.",
-                        f"{pos['code']} · 기간 말 기준", None))
+            raw.append(("CONCENTRATION", f"{_label(pos)} 비중 {pos['weight_pct']:.2f}%로 편중",
+                        pos["code"], None, pos["code"]))
     n_days, months = period.get("trading_days", 0), period.get("months", 1)
     raw.append(("LOW_SAMPLE", f"{months}개월({n_days}거래일) 표본은 통계적 의미가 약합니다.",
-                f"리밸런싱 {period.get('rebalances', 0)}회 · 청산 거래 {summary['closed_count']}건", None))
+                f"리밸런싱 {period.get('rebalances', 0)}회 · 청산 거래 {summary['closed_count']}건", None, ""))
     order = {c: i for i, c in enumerate(WARN_ORDER + INFO_ORDER)}
-    raw.sort(key=lambda a: order.get(a[0], len(order)))      # 안정 정렬: 같은 코드는 발생 순서
+    raw.sort(key=lambda a: (order.get(a[0], len(order)), a[3] or "", a[4]))
     out = []
-    for code, title, detail, day in raw:
+    for code, title, detail, day, _ in raw:
         level = "info" if code in INFO_ORDER else "warn"
         color = BLUE if level == "info" else (RED if code in RED_CODES else AMBER)
         out.append({"level": level, "code": code, "title": title, "detail": detail,
@@ -187,54 +220,125 @@ def build_alerts(summary: dict, stocks: list[dict], positions: list[dict],
     return out
 
 
-def build_insights(summary: dict, stocks: list[dict], closed: pd.DataFrame, alerts: list[dict]
-                   ) -> tuple[list[dict], dict]:
-    """strategy.md 10.1·10.2절 문장 틀. (insights 3개, next_action)."""
-    tr, bm, ex = (summary["total_return"] * 100, summary["benchmark_return"] * 100,
-                  summary["excess_return"] * 100)
-    if ex >= 0:
-        s1 = f"기간 수익률 {_spct(tr)}로 KOSPI({_spct(bm)})를 {_spct(ex)}p 상회했습니다."
+def _benchmark_sentence(summary: dict, ew: float | None, ew_count: int | None) -> str:
+    """10.1절 ①. 차이는 반올림 전 원값끼리 뺀다(10.0절 3번)."""
+    r, bm = summary["total_return"] * 100, summary["benchmark_return"] * 100
+    diff = (summary["total_return"] - summary["benchmark_return"]) * 100
+    head = f"기간 수익률 {_spct(r)}, "
+    if _disp(diff) > 0:
+        head += f"KOSPI({_spct(bm)})보다 {_upct(diff)}%p 높았습니다."
+    elif _disp(diff) < 0:
+        head += f"KOSPI({_spct(bm)})보다 {_upct(diff)}%p 낮았습니다."
     else:
-        s1 = f"기간 수익률 {_spct(tr)}로 KOSPI({_spct(bm)})를 {abs(ex):.2f}%p 하회했습니다."
-    traded = [s for s in stocks if s["trade_count"] > 0]
-    best = sorted(traded, key=lambda s: (-s["total_pnl"], s["code"]))
-    worst = sorted(traded, key=lambda s: (s["total_pnl"], s["code"]))
-    gain = best[0] if best and best[0]["total_pnl"] > 0 else None
-    loss = worst[0] if worst and worst[0]["total_pnl"] < 0 else None
+        head += f"KOSPI({_spct(bm)})와 같았습니다."
+    if ew is None:
+        return head
+    ew_diff = (summary["total_return"] - ew) * 100
+    tail = f"유니버스 {ew_count}종목 동일가중({_spct(ew * 100)})"
+    if _disp(ew_diff) > 0:
+        tail += f"보다 {_upct(ew_diff)}%p 높았습니다."
+    elif _disp(ew_diff) < 0:
+        tail += f"보다 {_upct(ew_diff)}%p 낮았습니다."
+    else:
+        tail += "과 같았습니다."
+    return f"{head} {tail}"
+
+
+def _position_clause(positions: list[dict], p_u: int, decisive: bool) -> str:
+    """10.1절 ② 종목 절. 기간 말 보유 포지션의 평가손익으로 고른다(종목별 총손익이 아니다)."""
+    if decisive:
+        picked = [p for p in positions if p["unrealized_pnl"] * p_u > 0]
+        label = "평가손실 상위" if p_u < 0 else "평가이익 상위"
+    else:
+        picked = [p for p in positions if p["unrealized_pnl"] != 0]
+        label = "평가손익 상위"
+    picked = _top_abs(picked, "unrealized_pnl")
+    if not picked:
+        return ""
+    return f"{label}: " + ", ".join(f"{_label(p)} {_swon(p['unrealized_pnl'])}원" for p in picked) + "."
+
+
+def _pnl_sentence(summary: dict, positions: list[dict]) -> str:
+    """10.1절 ② 손익 분해(B0~B6, 위에서부터 첫 번째 분기)."""
+    t, c, h = summary["trade_count"], summary["closed_count"], summary["holding_count"]
+    p_r, p_u, p = summary["realized_pnl"], summary["unrealized_pnl"], summary["total_pnl"]
+    if t == 0:
+        return "백테스트 기간에 체결된 거래가 없어 전 기간 현금을 보유했습니다."
+    opposite = p_r * p_u < 0
+    if c == 0 and h >= 1:
+        body, clause = f"청산된 거래가 없어 총손익 {_swon(p)}원은 전부 보유 {h}종목 평가손익입니다.", "general"
+    elif c >= 1 and h == 0:
+        body, clause = f"기간 말 보유 종목이 없어 총손익 {_swon(p)}원은 전부 실현 손익입니다(청산 {c}건).", None
+    elif opposite and abs(p_u) > abs(p_r):
+        body, clause = (f"실현 {_swon(p_r)}원이지만 보유 {h}종목 평가손익 {_swon(p_u)}원이 더 커 "
+                        f"총손익 {_swon(p)}원입니다."), "decisive"
+    elif opposite and abs(p_r) > abs(p_u):
+        body, clause = (f"보유 {h}종목 평가손익 {_swon(p_u)}원이지만 실현 {_swon(p_r)}원이 더 커 "
+                        f"총손익 {_swon(p)}원입니다."), "general"
+    elif opposite:
+        body, clause = (f"실현 {_swon(p_r)}원과 보유 {h}종목 평가손익 {_swon(p_u)}원이 상쇄되어 "
+                        "총손익 0원입니다."), "general"
+    else:
+        body, clause = (f"실현 {_swon(p_r)}원, 보유 {h}종목 평가손익 {_swon(p_u)}원으로 "
+                        f"총손익 {_swon(p)}원입니다."), "general"
+    extra = _position_clause(positions, p_u, clause == "decisive") if clause else ""
+    return f"{body} {extra}" if extra else body
+
+
+def _risk_sentence(summary: dict, breach: bool) -> str:
+    """10.1절 ③."""
     if summary["trade_count"] == 0:
-        s2 = "백테스트 기간에 체결된 거래가 없어 전 기간 현금을 보유했습니다."
-    elif gain and loss:
-        s2 = (f"{gain['name']}이(가) {_swon(gain['total_pnl'])}원으로 가장 크게 기여했고, "
-              f"{loss['name']}이(가) {_swon(loss['total_pnl'])}원으로 가장 크게 깎았습니다.")
-    elif gain:
-        s2 = f"{gain['name']}이(가) {_swon(gain['total_pnl'])}원으로 가장 크게 기여했고, 손실 종목은 없었습니다."
-    elif loss:
-        s2 = f"수익 종목은 없었고, {loss['name']}이(가) {_swon(loss['total_pnl'])}원으로 가장 크게 깎았습니다."
-    else:
-        s2 = "거래한 종목의 손익이 모두 0원입니다."
-    mdd = _spct(summary["mdd"] * 100)
-    names = {s["code"]: s["name"] for s in stocks}
+        return "거래가 없어 최대 낙폭(MDD)은 0.00%입니다."
+    mdd = summary["mdd"] * 100
+    if _disp(mdd) == 0:
+        return "최대 낙폭(MDD) 0.00%, 평가액이 직전 고점 아래로 내려간 날이 없습니다."
+    peak, trough = _mdd_span(summary)
+    tail = "임계 -5.00%를 넘었습니다." if breach else "임계 -5.00% 이내입니다."
+    return f"최대 낙폭(MDD) {_spct(mdd)}, 고점 {peak} → 저점 {trough}. {tail}"
+
+
+def _next_action(summary: dict, stocks: list[dict], positions: list[dict], alerts: list[dict]) -> str:
+    """10.2절. 우선순위 1~7 중 첫 번째 앞 절 + 고정 뒷 절(1번은 뒷 절 없음)."""
     if summary["trade_count"] == 0:
-        s3 = "거래가 없어 승률과 MDD는 의미가 없습니다."
-    elif summary["closed_count"] >= 1:
-        s3 = (f"총 {summary['trade_count']}회 체결, 청산 {summary['closed_count']}건 중 "
-              f"승률 {summary['win_rate'] * 100:.2f}%이며 최대 낙폭(MDD)은 {mdd}입니다.")
-        losers = [r for r in closed.to_dict("records") if r["pnl"] < 0]
-        if losers:
-            w = min(losers, key=lambda r: (r["pnl"], r["exit_date"], r["code"]))
-            s3 += f" 최대 손실 거래는 {names.get(w['code'], w['code'])} {_d(w['exit_date'])} {_swon(w['pnl'])}원입니다."
+        return "점검 필요의 데이터 알림과 백테스트 구간 설정을 먼저 확인하세요."
+    codes = [a["code"] for a in alerts]
+    n_data = sum(1 for c in codes if c in DATA_QUALITY_CODES)
+    losers_u = _top_abs([p for p in positions if p["unrealized_pnl"] < 0], "unrealized_pnl")
+    losers_r = _top_abs([s for s in stocks if s["realized_pnl"] < 0], "realized_pnl")
+    diff = (summary["total_return"] - summary["benchmark_return"]) * 100
+    if n_data >= 1:
+        head = f"수치를 해석하기 전에 점검 필요의 데이터 알림 {n_data}건을 먼저 확인하세요."
+    elif summary["total_pnl"] < 0 and losers_u:
+        head = f"종목별 상세에서 평가손실 상위 종목({'·'.join(_label(p) for p in losers_u)})을 먼저 확인하세요."
+    elif summary["total_pnl"] < 0 and losers_r:
+        head = f"종목별 상세에서 실현 손실 상위 종목({'·'.join(_label(s) for s in losers_r)})을 먼저 확인하세요."
+    elif "MDD_BREACH" in codes:
+        peak, trough = _mdd_span(summary)
+        head = f"자산 곡선에서 고점 {peak} → 저점 {trough} 구간을 먼저 확인하세요."
+    elif _disp(diff) < 0:
+        head = "자산 곡선에서 KOSPI와 차이가 벌어진 구간을 먼저 확인하세요."
     else:
-        s3 = f"총 {summary['trade_count']}회 체결했고 청산된 거래는 없으며, 최대 낙폭(MDD)은 {mdd}입니다."
-    insights = [{"no": f"{i:02d}", "title": t, "detail": s} for i, (t, s) in
-                enumerate([("벤치마크 대비", s1), ("종목 기여", s2), ("거래·위험", s3)], start=1)]
-    warns = [a for a in alerts if a["level"] == "warn"]
-    if warns:
-        text = f"리스크 알림 {len(warns)}건을 먼저 확인하세요: {warns[0]['title']}"
-    elif ex < 0:
-        text = "벤치마크를 밑돌았습니다. 기간을 3개월 이상으로 늘려 같은 규칙을 다시 검증해 보세요."
-    else:
-        text = "1개월 결과만으로는 판단하기 어렵습니다. 파라미터는 그대로 두고 기간을 늘려 검증해 보세요."
-    return insights, {"label": "다음 조치", "text": text}
+        head = "종목별 상세에서 손익이 특정 종목에 몰렸는지 먼저 확인하세요."
+    return f"{head} {NEXT_SUFFIX}"
+
+
+def build_insights(summary: dict, stocks: list[dict], closed: pd.DataFrame, alerts: list[dict],
+                   positions: list[dict] | None = None, equal_weight: float | None = None,
+                   equal_weight_count: int | None = None) -> tuple[list[dict], dict]:
+    """strategy.md 10.1·10.2절. (insights 3개, next_action).
+
+    positions·equal_weight·equal_weight_count는 개정 10절 문장의 재료다(키워드 인자, 기본값 있음).
+    closed는 architecture.md 1.7절 시그니처 호환을 위해 남긴다(10절 문장은 쓰지 않는다).
+    """
+    positions = positions or []
+    if equal_weight is not None and equal_weight_count is None:
+        equal_weight_count = len([s for s in stocks if s.get("status") != "excluded"])
+    breach = any(a["code"] == "MDD_BREACH" for a in alerts)
+    sentences = [("벤치마크 비교", _benchmark_sentence(summary, equal_weight, equal_weight_count)),
+                 ("손익 분해", _pnl_sentence(summary, positions)),
+                 ("리스크", _risk_sentence(summary, breach))]
+    insights = [{"no": f"{i:02d}", "title": t, "detail": d} for i, (t, d) in enumerate(sentences, start=1)]
+    return insights, {"label": "다음 조치", "text": _next_action(summary, stocks, positions, alerts)}
 
 
 # ---- 섹션 조립 --------------------------------------------------------------
@@ -250,6 +354,7 @@ def _stocks(raw: list[dict], excluded: set[str]) -> list[dict]:
             "buy_count": s["buy_count"], "sell_count": s["sell_count"],
             "closed_count": s["closed_count"], "win_count": s["win_count"],
             "win_rate_pct": _pct(s["win_rate"]), "realized_pnl": s["realized_pnl"],
+            "realized_pnl_sign": sign_of(s["realized_pnl"]),
             "unrealized_pnl": s["unrealized_pnl"], "total_pnl": s["total_pnl"],
             "return_pct": _pct(s["ret"]), "contribution_pct": _pct(s["contribution"]),
             "sign": sign_of(s["total_pnl"]),
@@ -264,18 +369,26 @@ def _stocks(raw: list[dict], excluded: set[str]) -> list[dict]:
     return out
 
 
-def _top_contributors(stocks: list[dict]) -> dict:
-    traded = sorted([s for s in stocks if s["trade_count"] > 0],
-                    key=lambda s: (-s["total_pnl"], s["code"]))
+def _top_contributors(stocks: list[dict], trade_count: int) -> dict:
+    """architecture.md 5.5절(개정 1.1): |total_pnl| 내림차순 상위 5(held/closed, 동률 종목코드순).
+    note는 strategy.md 10.4절: 유니버스 전 종목 기준, 한 종목은 한쪽에만 들어간다."""
+    traded = _top_abs([s for s in stocks if s["status"] in ("held", "closed")], "total_pnl", 5)
     items = [{"rank": i, "code": s["code"], "name": s["name"], "pnl": s["total_pnl"],
-              "sign": s["sign"], "bar_pct": s["bar_pct"]} for i, s in enumerate(traded[:5], start=1)]
-    losers = [s for s in traded if s["total_pnl"] < 0]
-    if not items:
-        note = "거래한 종목이 없습니다."
+              "sign": s["sign"], "bar_pct": s["bar_pct"]} for i, s in enumerate(traded, start=1)]
+    gains = [s["total_pnl"] for s in stocks if s["total_pnl"] > 0]
+    losses = [s["total_pnl"] for s in stocks if s["total_pnl"] < 0]
+    n, x, m, y = len(gains), sum(gains), len(losses), -sum(losses)
+    z = x - y
+    if trade_count == 0:
+        note = "거래가 없어 손익 기여 종목이 없습니다."
+    elif n and m:
+        note = f"이익 {n}종목 합계 {_swon(x)}원, 손실 {m}종목 합계 {_swon(-y)}원 → 총손익 {_swon(z)}원"
+    elif n:
+        note = f"이익 {n}종목 합계 {_swon(x)}원, 손실 종목 없음 → 총손익 {_swon(z)}원"
+    elif m:
+        note = f"이익 종목 없음, 손실 {m}종목 합계 {_swon(-y)}원 → 총손익 {_swon(z)}원"
     else:
-        note = f"상위 {len(items)}종목 손익 합계 {_swon(sum(i['pnl'] for i in items))}원, "
-        note += (f"손실 {len(losers)}종목 합계 {_swon(sum(s['total_pnl'] for s in losers))}원입니다."
-                 if losers else "손실 종목은 없습니다.")
+        note = "손익이 발생한 종목이 없습니다 → 총손익 0원"
     return {"items": items, "note": note}
 
 
@@ -323,13 +436,26 @@ def _target(summary: dict, capital: int, target_pct: float) -> dict:
     realized_w = _r(_clip(summary["realized_pnl"] / (capital * target) * 100, 0, progress), 2)
     target_equity = int(math.floor(capital * (1 + target) + 0.5))
     gap = max(target_equity - summary["final_equity"], 0)
-    achieved = summary["final_equity"] >= target_equity
-    caption = f"목표 {_spct(target_pct)} 대비 {raw:.2f}% 달성. "
-    caption += (f"목표 평가금액을 {summary['final_equity'] - target_equity:,}원 넘었습니다." if achieved
-                else f"목표 평가금액까지 {gap:,}원 남았습니다.")
+    final = summary["final_equity"]
+    achieved = final >= target_equity
+    # strategy.md 10.5절: 달성 여부는 정수 원으로 판정, 진척률(달성률)은 문장에 쓰지 않는다.
+    cur = _spct(summary["total_return"] * 100)
+    g = _upct((summary["total_return"] - target) * 100)
+    if final < target_equity:
+        caption = (f"목표 {_spct(target_pct)}에 {g}%p 못 미쳤습니다(현재 {cur}). "
+                   f"목표 평가금액까지 {target_equity - final:,}원 부족.")
+    elif final == target_equity:
+        caption = f"목표 {_spct(target_pct)}를 달성했습니다(현재 {cur})."
+    else:
+        caption = (f"목표 {_spct(target_pct)}를 {g}%p 넘었습니다(현재 {cur}). "
+                   f"목표 평가금액보다 {final - target_equity:,}원 많습니다.")
+    current = _pct(summary["total_return"])
     return {
-        "target_return_pct": _r(target_pct, 4), "actual_return_pct": _pct(summary["total_return"]),
-        "sign": sign_of(_pct(summary["total_return"])), "target_equity": target_equity,
+        "target_return_pct": _r(target_pct, 4), "actual_return_pct": current,
+        "sign": sign_of(current),
+        "current_return_pct": current, "current_return_sign": sign_of(current),
+        "gap_pct": _r((summary["total_return"] - target) * 100, 4),
+        "target_equity": target_equity,
         "gap_amount": int(gap), "achieved": achieved, "progress_raw_pct": _r(raw, 4),
         "progress_pct": progress,
         "bar_segments": [
@@ -431,9 +557,12 @@ def build_result(cfg: dict, period: dict, bt: dict, bench: pd.DataFrame, bench_i
         events.append({"code": "BENCHMARK_BASE_FALLBACK", "stock": None, "date": None,
                        "value": None, "excluded": False, "side": None, "extra": {}})
     alerts = build_alerts(summ, stocks, positions, issues, events, info)
-    insights, next_action = build_insights(summ, stocks, closed, alerts)
-    weekly = _weekly(weeks_raw)
     ew = bench_info.get("equal_weight_return")
+    insights, next_action = build_insights(summ, stocks, closed, alerts, positions=positions,
+                                           equal_weight=ew,
+                                           equal_weight_count=bench_info.get("equal_weight_count"))
+    weekly = _weekly(weeks_raw)
+    ew_excess = _r((summ["total_return"] - ew) * 100, 4) if ew is not None else None
     pct = {k: _pct(summ[k]) for k in ("total_return", "benchmark_return", "mdd")}
     excess_pct = _r(summ["excess_return"] * 100, 4)
     cash_weight_pct = _pct(summ["cash_weight"])
@@ -454,7 +583,7 @@ def build_result(cfg: dict, period: dict, bt: dict, bench: pd.DataFrame, bench_i
         })
 
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "meta": {
             "is_example": False,
             "label": "STOCK-SIM · 모의투자 백테스트",
@@ -499,6 +628,8 @@ def build_result(cfg: dict, period: dict, bt: dict, bench: pd.DataFrame, bench_i
             "benchmark_return_sign": sign_of(pct["benchmark_return"]),
             "excess_return_pct": excess_pct, "excess_return_sign": sign_of(excess_pct),
             "equal_weight_return_pct": _pct(ew), "equal_weight_return_sign": sign_of(_pct(ew)),
+            "excess_vs_equal_weight_pct": ew_excess,
+            "excess_vs_equal_weight_sign": sign_of(ew_excess),
             "mdd_pct": pct["mdd"], "mdd_sign": sign_of(pct["mdd"]),
             "mdd_peak_date": _d(summ["mdd_peak_date"]), "mdd_trough_date": _d(summ["mdd_trough_date"]),
             "trade_count": summ["trade_count"], "buy_count": summ["buy_count"],
@@ -528,7 +659,7 @@ def build_result(cfg: dict, period: dict, bt: dict, bench: pd.DataFrame, bench_i
         "allocation": _allocation(positions, summ["cash"], final_equity, _d(dn), cash_weight_pct),
         "trades": trade_rows,
         "per_stock": stocks,
-        "top_contributors": _top_contributors(stocks),
+        "top_contributors": _top_contributors(stocks, summ["trade_count"]),
         "weekly_flow": weekly,
         "alerts": alerts,
         "insights": insights,

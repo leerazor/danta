@@ -1,6 +1,6 @@
 """result.json -> 정적 HTML 대시보드 렌더러.
 
-계약: docs/architecture.md 1.8절, 5.2절.
+계약: docs/architecture.md 1.8절, 5.2절(schema 1.x, 필터 6개).
 - 표준 라이브러리 + jinja2 만 쓴다. stock_sim 의 다른 모듈을 import 하지 않는다.
 - 수치 계산(합계·비율·좌표)을 하지 않는다. 필터는 표시 변환만 한다.
 
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 NULL_TEXT = "–"
 SIGN_COLORS = {"pos": "#1428A0", "neg": "#B0472F", "zero": "#6E7688"}
+# 어두운 배경(헤더 KPI, 다크 패널)용. architecture.md 5.2절(개정 1.1), CLAUDE.md 8절.
+SIGN_COLORS_DARK = {"pos": "#7C9BFF", "neg": "#E29A80", "zero": "#FFFFFF"}
 SUPPORTED_MAJOR = "1"
 
 
@@ -77,12 +79,18 @@ def sign_color(sign) -> str:
     return SIGN_COLORS.get(sign, SIGN_COLORS["zero"])
 
 
+def sign_color_dark(sign) -> str:
+    """어두운 배경용: 'pos' -> #7C9BFF, 'neg' -> #E29A80, 그 외(zero·null) -> 흰색."""
+    return SIGN_COLORS_DARK.get(sign, SIGN_COLORS_DARK["zero"])
+
+
 FILTERS = {
     "won": won,
     "signed_won": signed_won,
     "pct": pct,
     "signed_pct": signed_pct,
     "sign_color": sign_color,
+    "sign_color_dark": sign_color_dark,
 }
 
 

@@ -131,6 +131,7 @@ def syn_run(prices: dict | None = None) -> dict:
                                CAPITAL, 2, COSTS)
     bench, bench_info = metrics.benchmark_curve(syn_index(), days, CAPITAL)
     bench_info["equal_weight_return"] = metrics.equal_weight_return(prices, days)
+    bench_info["equal_weight_count"] = metrics.equal_weight_count(prices, days)
     period = {"fetch_start": SYN_FETCH_START, "requested_start": SYN_REQ_START, "end": SYN_END,
               "rebalances": len(schedule)}
     return {"cfg": cfg, "prices": prices, "calendar": calendar, "days": days,

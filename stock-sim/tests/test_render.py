@@ -25,6 +25,10 @@ _spec.loader.exec_module(render_mod)
 
 PROFIT = "#1428A0"
 LOSS = "#B0472F"
+DARK_PROFIT = "#7C9BFF"
+DARK_LOSS = "#E29A80"
+ALLOWED_BY_SIGN = {"+": {PROFIT, DARK_PROFIT}, "-": {LOSS, DARK_LOSS}}
+SIGNED_VALUE = re.compile(r"^([+-])[\d,]+(?:\.\d+)?(?:원|%p?)$")
 VOID_TAGS = {"meta", "link", "br", "hr", "img", "input"}
 
 
@@ -60,6 +64,46 @@ class _Balance(HTMLParser):
             self.errors.append(f"</{tag}> at {self.getpos()} (stack top: {self.stack[-1:]})")
         else:
             self.stack.pop()
+
+
+class _SignedColors(HTMLParser):
+    """부호 있는 값만 담은 텍스트 노드마다 (실효 글자색, 부호, 값)을 모은다.
+
+    실효 글자색 = 가장 가까운 조상의 인라인 color. 없으면 None(중립 취급 -> 실패).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.colors: list[str | None] = []
+        self.found: list[tuple[str | None, str, str]] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in VOID_TAGS:
+            return
+        style = dict(attrs).get("style") or ""
+        m = re.search(r"(?:^|;)\s*color:\s*(#[0-9A-Fa-f]{6})", style)
+        inherited = self.colors[-1] if self.colors else None
+        self.colors.append(m.group(1).upper() if m else inherited)
+
+    def handle_endtag(self, tag):
+        if tag not in VOID_TAGS and self.colors:
+            self.colors.pop()
+
+    def handle_data(self, data):
+        m = SIGNED_VALUE.match(data.strip())
+        if m:
+            self.found.append((self.colors[-1] if self.colors else None, m.group(1), data.strip()))
+
+
+def assert_sign_color_agree(html: str) -> list[tuple[str | None, str, str]]:
+    """부호 있는 값은 전부 부호에 맞는 색이어야 한다(흰 배경 블루/손실색, 어두운 배경 #7C9BFF/#E29A80).
+    중립색(#4A5568 등)이나 색 없음도 실패다(phase4-1 M2)."""
+    p = _SignedColors()
+    p.feed(html)
+    p.close()
+    bad = [(c, v) for c, sign, v in p.found if c not in ALLOWED_BY_SIGN[sign]]
+    assert not bad, f"부호와 색 불일치: {bad}"
+    return p.found
 
 
 def parse(html: str) -> _Balance:
@@ -107,7 +151,8 @@ def assert_clean(html: str) -> None:
 # ---------- 필터 ----------
 def test_filters_match_contract():
     f = render_mod.FILTERS
-    assert set(f) == {"won", "signed_won", "pct", "signed_pct", "sign_color"}
+    assert set(f) == {"won", "signed_won", "pct", "signed_pct", "sign_color", "sign_color_dark"}
+    assert len(f) == 6
     assert f["won"](101858842) == "101,858,842원"
     assert f["signed_won"](-516743) == "-516,743원"
     assert f["signed_won"](906237) == "+906,237원"
@@ -120,6 +165,10 @@ def test_filters_match_contract():
     assert f["sign_color"]("neg") == LOSS
     assert f["sign_color"]("zero") == "#6E7688"
     assert f["sign_color"](None) == "#6E7688"
+    assert f["sign_color_dark"]("pos") == DARK_PROFIT
+    assert f["sign_color_dark"]("neg") == DARK_LOSS
+    assert f["sign_color_dark"]("zero") == "#FFFFFF"
+    assert f["sign_color_dark"](None) == "#FFFFFF"
     for name in ("won", "signed_won", "pct", "signed_pct"):
         assert f[name](None) == "–"
 
@@ -149,7 +198,10 @@ def test_example_kpi_values_shown(example, tmp_path):
         "매수 8 · 매도 3",
         "101,858,842원",   # summary.final_equity
         "-516,743원",      # summary.realized_pnl
+        "보유 종목 평가손익",
         "+2,375,585원",    # summary.unrealized_pnl
+        "+1,858,842원",    # summary.total_pnl (합계)
+        "현재 수익률",
         "33.33%",          # summary.win_rate_pct
         "1승 2패",
         "5종목",           # summary.holding_count
@@ -167,7 +219,12 @@ def test_example_sections_and_data_passthrough(example, tmp_path):
     for title in ("자산 곡선과 벤치마크", "포지션 비중", "주차별 매매 구성", "종목별 손익 기여 상위 5",
                   "분석 요약", "종목별 상세", "점검 필요", "목표 수익률 진척"):
         assert title in html, title
-    assert "매매 내역" not in html  # 섹션을 새로 만들지 않는다
+    assert "매매 내역" in html  # 12번째 섹션(개정 1.1)
+    for t in example["trades"]:
+        assert t["reason"] in html and t["date"] in html
+    assert "거래대금 19,750,000원 · 79주" in html  # per_stock 보조줄(NAVER)
+    assert example["target"]["caption"] in html
+    assert html.index("종목별 상세") < html.index("매매 내역")
     # JSON 의 기하 값이 그대로 들어간다
     assert example["charts"]["equity"]["equity_points"] in html
     assert example["charts"]["equity"]["benchmark_points"] in html
@@ -192,14 +249,38 @@ def test_example_sections_and_data_passthrough(example, tmp_path):
 
 def test_sign_and_color_agree(example, tmp_path):
     html = render_dict(example, tmp_path)
-    # 부호 있는 표시값이 색을 입고 있으면 그 색은 부호와 맞아야 한다
-    pattern = re.compile(r'color: (#[0-9A-F]{6});[^"]*"[^>]*>(?:평가 )?([+-])[\d,.]+(?:원|%)')
-    found = pattern.findall(html)
-    assert len(found) >= 15
-    for color, sign in found:
-        if color in (PROFIT, LOSS):
-            assert (sign == "+") == (color == PROFIT), (color, sign)
-    assert any(c == LOSS for c, _ in found) and any(c == PROFIT for c, _ in found)
+    found = assert_sign_color_agree(html)
+    assert len(found) >= 25
+    assert {PROFIT, LOSS, DARK_PROFIT, DARK_LOSS} <= {c for c, _, _ in found}
+    # 헤더 KPI: 수익률·초과수익은 어두운 배경 수익색, MDD 는 어두운 배경 손실색
+    header = html.split("<main")[0]
+    assert f'color: {DARK_PROFIT};">+1.86%<' in header
+    assert f'color: {DARK_PROFIT};">+1.01%p<' in header
+    assert f'color: {DARK_LOSS};">-2.15%<' in header
+    assert "시장 상회" in header
+
+
+def test_neutral_colored_pnl_is_caught():
+    """검사기 자체: 중립색·반대색·무색 손익은 실패로 잡아야 한다(phase4-1 M2)."""
+    with pytest.raises(AssertionError):
+        assert_sign_color_agree('<div style="color: #4A5568;">+1,151,604원</div>')
+    with pytest.raises(AssertionError):
+        assert_sign_color_agree(f'<div style="color: {PROFIT};">-147,704원</div>')
+    with pytest.raises(AssertionError):
+        assert_sign_color_agree('<div>+3.00%</div>')
+    assert_sign_color_agree(f'<div style="color: {LOSS};"><span>-1원</span></div>')
+
+
+def test_realized_sign_differs_from_total_sign(example, tmp_path):
+    """실현 이익 + 더 큰 평가손실: 실현손익 열은 블루, 총손익·수익률은 손실색."""
+    d = copy.deepcopy(example)
+    d["per_stock"][0].update(realized_pnl=1151604, realized_pnl_sign="pos", unrealized_pnl=-2006634,
+                             total_pnl=-855030, return_pct=-4.3, sign="neg")
+    html = render_dict(d, tmp_path)
+    found = assert_sign_color_agree(html)
+    assert (PROFIT, "+", "+1,151,604원") in found
+    assert (LOSS, "-", "-855,030원") in found
+    assert (LOSS, "-", "-4.30%") in found
 
 
 # ---------- 변형 입력(architecture.md 5.6절) ----------
@@ -259,6 +340,9 @@ def test_no_trades_case(example, tmp_path):
     assert "백테스트 기간에 거래가 없습니다." in html
     assert ">–<" in html                # null 은 '–'
     assert "0종목" in html
+    assert "매매 내역" in html          # 카드는 남는다(5.6절)
+    assert "거래 없음 (백테스트 구간에 체결된 매매가 없습니다)" in html
+    assert "비용 합계" not in html
 
 
 def test_loss_case_red_alert_and_null_peak(example, tmp_path):
@@ -270,9 +354,14 @@ def test_loss_case_red_alert_and_null_peak(example, tmp_path):
              unrealized_pnl=-1200000, unrealized_pnl_sign="neg")
     d["top_contributors"]["items"][4].update(pnl=-298485, sign="neg")
     d["alerts"].insert(0, {"level": "warn", "code": "MDD_BREACH",
-                           "title": "MDD -7.50%가 임계 -5.00%를 넘었습니다(2026-09-14).",
-                           "detail": "", "date": "2026-09-14", "color": LOSS})
-    d["target"].update(actual_return_pct=-6.2345, sign="neg", progress_raw_pct=-311.725, progress_pct=0.0)
+                           "title": "MDD -7.50%가 임계 -5.00%를 넘었습니다.",
+                           "detail": "고점 시작 → 저점 2026-09-14", "date": None, "color": LOSS})
+    d["alerts"].insert(1, {"level": "warn", "code": "LOSS_STREAK", "title": "연속 손실 3회.",
+                           "detail": "", "date": "2026-09-21", "color": LOSS})
+    d["alerts"].insert(2, {"level": "warn", "code": "UNDERPERFORM", "title": "벤치마크 하회.",
+                           "detail": "KOSPI보다 7.08%p 낮음", "date": "2026-09-29", "color": LOSS})
+    d["target"].update(actual_return_pct=-6.2345, sign="neg", current_return_pct=-6.2345,
+                       current_return_sign="neg", gap_pct=-8.2345, progress_raw_pct=-311.725, progress_pct=0.0)
     for b in d["target"]["bar_segments"]:
         b["width_pct"] = 0.0
     html = render_dict(d, tmp_path)
@@ -281,10 +370,18 @@ def test_loss_case_red_alert_and_null_peak(example, tmp_path):
     assert "시작 → 2026-09-14" in html   # mdd_peak_date null
     assert f"background: {LOSS}; margin-top: 6px;" in html   # 빨간 알림 점
     assert "-298,485원" in html
-    # 손실 수치가 블루로 칠해진 곳이 없다
-    assert not re.search(rf'color: {PROFIT};[^"]*"[^>]*>(?:평가 )?-[\d,.]+(?:원|%)', html)
-    # 이익 수치가 손실색으로 칠해진 곳이 없다
-    assert not re.search(rf'color: {LOSS};[^"]*"[^>]*>(?:평가 )?\+[\d,.]+(?:원|%)', html)
+    assert_sign_color_agree(html)
+    header = html.split("<main")[0]
+    assert f'color: {DARK_LOSS};">-6.23%<' in header and "시장 하회" in header
+    assert f'color: {LOSS};">-6.23%<' in html          # 목표 카드 현재 수익률
+    assert "수익률이 0% 아래라 진척 0%" in html
+    # 알림: detail 이 있으면 date 를 덧붙이지 않고, detail 이 비면 date 를 보인다(phase4-1 L3)
+    assert ">고점 시작 → 저점 2026-09-14</div>" in html
+    assert ">KOSPI보다 7.08%p 낮음</div>" in html
+    assert "2026-09-29</div>" not in html.split("점검 필요")[1].split("목표 수익률 진척")[0]
+    assert ">2026-09-21</div>" in html
+    # 경고/참고 텍스트 라벨(점 색 외 구분). 예시 알림 warn 1 + info 1 에 warn 3 추가
+    assert html.count(">경고</span>") == 4 and html.count(">참고</span>") == 1
 
 
 def test_only_low_sample_and_thin_slice(example, tmp_path):

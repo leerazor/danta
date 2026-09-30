@@ -42,17 +42,17 @@
     <div style="display: flex; gap: 34px; flex-wrap: wrap; border-top: 1px solid rgba(200,210,240,0.2); padding-top: 20px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
         <div style="font-size: 13px; color: #98A3D2;">누적 수익률</div>
-        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ summary.total_return_pct|signed_pct }}</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: {{ summary.total_return_sign|sign_color_dark }};">{{ summary.total_return_pct|signed_pct }}</div>
         <div style="font-size: 12px; color: #AEB8DE;">최종 {{ summary.final_equity|won }}</div>
       </div>
       <div style="display: flex; align-items: baseline; gap: 10px;">
         <div style="font-size: 13px; color: #98A3D2;">{{ meta.benchmark.name }} 대비 초과수익</div>
-        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ summary.excess_return_pct|signed_pct }}p</div>
-        <div style="font-size: 12px; color: #AEB8DE;">{{ meta.benchmark.name }} {{ summary.benchmark_return_pct|signed_pct }}</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: {{ summary.excess_return_sign|sign_color_dark }};">{{ summary.excess_return_pct|signed_pct }}p</div>
+        <div style="font-size: 12px; color: #AEB8DE;">{{ meta.benchmark.name }} {{ summary.benchmark_return_pct|signed_pct }} · {% if summary.excess_return_sign == "pos" %}시장 상회{% elif summary.excess_return_sign == "neg" %}시장 하회{% else %}시장과 같음{% endif %}</div>
       </div>
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <div style="font-size: 13px; color: #98A3D2;">MDD</div>
-        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ summary.mdd_pct|signed_pct }}</div>
+        <div style="font-size: 13px; color: #98A3D2;">최대 낙폭(MDD)</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: {{ summary.mdd_sign|sign_color_dark }};">{{ summary.mdd_pct|signed_pct }}</div>
         <div style="font-size: 12px; color: #AEB8DE;">{% if summary.mdd_trough_date is none %}낙폭 없음{% else %}{% if summary.mdd_peak_date is none %}시작{% else %}{{ summary.mdd_peak_date }}{% endif %} → {{ summary.mdd_trough_date }}{% endif %}</div>
       </div>
       <div style="display: flex; align-items: baseline; gap: 10px;">
@@ -81,7 +81,10 @@
         <div style="font-size: 13px; color: #6E7688;">실현 손익</div>
         <div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;">
           <div style="font-family: 'Gothic A1', sans-serif; font-size: 26px; font-weight: 900; line-height: 1; white-space: nowrap; color: {{ summary.realized_pnl_sign|sign_color }};">{{ summary.realized_pnl|signed_won }}</div>
-          <div style="font-size: 12px; color: {{ summary.unrealized_pnl_sign|sign_color }}; font-weight: 700;">평가 {{ summary.unrealized_pnl|signed_won }}</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #6E7688;">
+          <div style="white-space: nowrap;">보유 종목 평가손익 <span style="color: {{ summary.unrealized_pnl_sign|sign_color }};">{{ summary.unrealized_pnl|signed_won }}</span></div>
+          <div style="white-space: nowrap;">합계 <span style="color: {{ summary.total_pnl_sign|sign_color }}; font-weight: 700;">{{ summary.total_pnl|signed_won }}</span></div>
         </div>
         <svg viewBox="{{ charts.sparklines.viewbox }}" preserveAspectRatio="none" role="img" aria-label="누적 실현 손익 추이" style="width: 100%; height: 44px; margin-top: auto;">
           <polyline points="{{ charts.sparklines.realized_pnl }}" fill="none" stroke="#4B5CC0" stroke-width="2.5" stroke-linejoin="round"></polyline>
@@ -111,7 +114,7 @@
         <div style="font-size: 13px; color: #6E7688;">총 거래대금</div>
         <div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;">
           <div style="font-family: 'Gothic A1', sans-serif; font-size: 26px; font-weight: 900; line-height: 1; white-space: nowrap;">{{ summary.total_trade_value|won }}</div>
-          <div style="font-size: 12px; color: #6E7688; font-weight: 700;">{% if flags.no_trades %}거래 없음{% else %}{{ "{:,}".format(summary.total_trade_volume) }}주{% endif %}</div>
+          <div style="font-size: 12px; color: #6E7688; font-weight: 700;">{% if flags.no_trades %}거래 없음{% else %}총 거래량 {{ "{:,}".format(summary.total_trade_volume) }}주{% endif %}</div>
         </div>
         <div style="display: flex; gap: 4px; align-items: flex-end; height: 44px; margin-top: auto;">
           {%- for b in charts.trade_value_bars %}
@@ -136,7 +139,7 @@
               <div style="font-size: 12px; color: #6E7688;">전략</div>
             </div>
             <div style="display: flex; align-items: center; gap: 7px;">
-              <div style="width: 14px; height: 3px; background: #98A3D2;"></div>
+              <div style="width: 14px; height: 0; border-top: 3px dashed #98A3D2;"></div>
               <div style="font-size: 12px; color: #6E7688;">{{ meta.benchmark.name }} buy&amp;hold</div>
             </div>
           </div>
@@ -246,7 +249,7 @@
       <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 22px;">
         <div style="display: flex; flex-direction: column; gap: 5px;">
           <div style="font-size: 16px; font-weight: 700;">종목별 손익 기여 상위 5</div>
-          <div style="font-size: 13px; color: #6E7688;">총손익(실현 + 평가) · 단위 원</div>
+          <div style="font-size: 13px; color: #6E7688;">손익 절댓값 큰 순 · 총손익(실현 + 평가) · 단위 원</div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 18px;">
           {%- for it in top_contributors['items'] %}
@@ -292,30 +295,30 @@
         <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
           <div style="display: flex; flex-direction: column; gap: 5px;">
             <div style="font-size: 16px; font-weight: 700;">종목별 상세</div>
-            <div style="font-size: 13px; color: #6E7688;">거래 횟수 · 총손익 · 승률 · 실현손익 · 수익률</div>
+            <div style="font-size: 13px; color: #6E7688;">총손익 높은 순 · 거래 종목 → 거래 없음 → 제외 · 수익률은 매수금액 대비</div>
           </div>
           <div style="font-size: 13px; color: #1428A0; font-weight: 500;">유니버스 {{ meta.universe|length }}종목</div>
         </div>
         <div style="display: grid; grid-template-columns: 1.4fr 0.6fr 1.9fr 0.7fr 1fr 0.8fr;">
           <div style="padding: 10px 12px 10px 0; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">종목</div>
-          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">거래</div>
-          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">총손익(실현 + 평가)</div>
-          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">승률</div>
-          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">실현손익</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">거래</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">총손익(실현 + 평가)</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">승률</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">실현손익</div>
           <div style="padding: 10px 0 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">수익률</div>
           {% for r in per_stock %}
           {%- set bb = "" if loop.last else " border-bottom: 1px solid #EEF0F5;" %}
           <div style="padding: 12px 12px 12px 0; font-size: 14px; font-weight: 500;{{ bb }} display: flex; flex-direction: column; gap: 2px;">
             <div>{{ r.name }}</div>
-            <div style="font-size: 11px; font-weight: 400; color: #8B92A2;">{{ r.code }} · {{ r.status_label }}</div>
+            <div style="font-size: 11px; font-weight: 400; color: #8B92A2;">{{ r.code }} · {{ r.status_label }}{% if r.trade_count %} · 거래대금 {{ r.trade_value|won }} · {{ "{:,}".format(r.trade_volume) }}주{% endif %}</div>
           </div>
-          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center;">{{ "{:,}".format(r.trade_count) }}회</div>
+          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center; justify-content: flex-end;">{{ "{:,}".format(r.trade_count) }}회</div>
           <div style="padding: 12px 12px;{{ bb }} display: flex; align-items: center; gap: 10px;">
             <div style="flex: 1; height: 6px; border-radius: 3px; background: #F1F2F7;"><div style="width: {{ r.bar_pct }}%; height: 6px; border-radius: 3px; background: {{ r.sign|sign_color }};"></div></div>
             <div style="font-size: 13px; font-weight: 700; width: 92px; text-align: right; white-space: nowrap; color: {{ r.sign|sign_color }};">{% if r.trade_count %}{{ r.total_pnl|signed_won }}{% else %}–{% endif %}</div>
           </div>
-          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center;">{{ r.win_rate_pct|pct }}</div>
-          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center; white-space: nowrap;">{% if r.trade_count %}{{ r.realized_pnl|signed_won }}{% else %}–{% endif %}</div>
+          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center; justify-content: flex-end;">{{ r.win_rate_pct|pct }}</div>
+          <div style="padding: 12px 12px; font-size: 14px; color: {{ r.realized_pnl_sign|sign_color }};{{ bb }} display: flex; align-items: center; justify-content: flex-end; white-space: nowrap;">{% if r.trade_count %}{{ r.realized_pnl|signed_won }}{% else %}–{% endif %}</div>
           <div style="padding: 12px 0 12px 12px; font-size: 13px; color: {{ r.sign|sign_color }}; font-weight: 700;{{ bb }} display: flex; align-items: center; justify-content: flex-end;">{{ r.return_pct|signed_pct }}</div>
           {% endfor %}
         </div>
@@ -333,9 +336,11 @@
             <div style="display: grid; grid-template-columns: 8px 1fr; gap: 14px; align-items: start;">
               <div style="width: 8px; height: 8px; border-radius: 50%; background: {{ a.color }}; margin-top: 6px;"></div>
               <div style="display: flex; flex-direction: column; gap: 4px;">
-                <div style="font-size: 14px; font-weight: 500;">{{ a.title }}</div>
-                {%- if a.detail or a.date %}
-                <div style="font-size: 12px; color: #8B92A2;">{{ a.detail }}{% if a.detail and a.date %} · {% endif %}{% if a.date %}{{ a.date }}{% endif %}</div>
+                <div style="font-size: 14px; font-weight: 500;"><span style="display: inline-block; margin-right: 6px; padding: 0 6px; border: 1px solid {{ a.color }}; border-radius: 4px; font-size: 11px; font-weight: 700; line-height: 18px; color: #0A1547; vertical-align: 1px;">{% if a.level == "warn" %}경고{% elif a.level == "info" %}참고{% else %}{{ a.level }}{% endif %}</span>{{ a.title }}</div>
+                {%- if a.detail %}
+                <div style="font-size: 12px; color: #8B92A2;">{{ a.detail }}</div>
+                {%- elif a.date %}
+                <div style="font-size: 12px; color: #8B92A2;">{{ a.date }}</div>
                 {%- endif %}
               </div>
             </div>
@@ -356,15 +361,60 @@
               <div title="{{ b.label }} {{ b.width_pct|pct }}" style="width: {{ b.width_pct }}%; background: {{ b.color }};"></div>
               {%- endfor %}
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <div style="font-size: 12px; color: #6E7688;">{% for b in target.bar_segments %}{{ b.label }} {{ b.width_pct|pct }}{% if not loop.last %} · {% endif %}{% endfor %} · 실제 <span style="color: {{ target.sign|sign_color }}; font-weight: 700;">{{ target.actual_return_pct|signed_pct }}</span></div>
-              <div style="font-family: 'Gothic A1', sans-serif; font-size: 16px; font-weight: 700;">{{ target.progress_pct|pct }}</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;">
+              <div style="font-size: 12px; line-height: 1.5; color: #6E7688;">진척 {{ target.progress_pct|pct }} ({% for b in target.bar_segments %}{{ b.label }} {{ b.width_pct|pct }}{% if not loop.last %} · {% endif %}{% endfor %}){% if target.current_return_sign == "neg" %} · 수익률이 0% 아래라 진척 0%{% endif %}</div>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;">
+                <div style="font-size: 11px; color: #8B92A2;">현재 수익률</div>
+                <div style="font-family: 'Gothic A1', sans-serif; font-size: 20px; font-weight: 700; color: {{ target.current_return_sign|sign_color }};">{{ target.current_return_pct|signed_pct }}</div>
+              </div>
             </div>
           </div>
           <div style="border-top: 1px solid #EEF0F5; padding-top: 14px; font-size: 13px; line-height: 1.6; color: #4A5568;">{{ target.caption }}</div>
         </div>
       </div>
     </section>
+
+    {#- 12. 매매 내역 표(개정 1.1, 상세 테이블과 같은 카드 스타일) #}
+    <section style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px 14px; display: flex; flex-direction: column; gap: 18px;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="font-size: 16px; font-weight: 700;">매매 내역</div>
+          <div style="font-size: 13px; color: #6E7688;">체결 순 · 신호는 T일 종가, 체결은 T+1일 시가 · 비용은 매수·매도 양쪽 반영</div>
+        </div>
+        <div style="font-size: 13px; color: #1428A0; font-weight: 500; white-space: nowrap;">{% if flags.no_trades %}거래 없음{% else %}{{ "{:,}".format(summary.trade_count) }}건 · 비용 합계 {{ summary.total_cost|won }}{% endif %}</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 0.9fr 1.3fr 0.55fr 0.6fr 0.9fr 1.05fr 0.7fr 1fr 1.5fr;">
+        <div style="padding: 10px 12px 10px 0; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">체결일</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">종목</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">구분</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">수량</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">체결가</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">금액</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">비용</div>
+        <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">실현손익</div>
+        <div style="padding: 10px 0 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">사유</div>
+        {% for t in trades %}
+        {%- set bb = "" if loop.last else " border-bottom: 1px solid #EEF0F5;" %}
+        <div style="padding: 11px 12px 11px 0; font-size: 13px; color: #4A5568;{{ bb }} display: flex; align-items: center; white-space: nowrap;">{{ t.date }}</div>
+        <div style="padding: 11px 12px; font-size: 13px; font-weight: 500;{{ bb }} display: flex; flex-direction: column; justify-content: center; gap: 2px;">
+          <div>{{ t.name }}</div>
+          <div style="font-size: 11px; font-weight: 400; color: #8B92A2;">{{ t.code }}</div>
+        </div>
+        <div style="padding: 11px 12px;{{ bb }} display: flex; align-items: center;"><span style="padding: 1px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; {% if t.side == "SELL" %}background: #0A1547; color: #FFFFFF;{% else %}background: #EEF0F5; color: #0A1547;{% endif %}">{{ t.side_label }}</span></div>
+        <div style="padding: 11px 12px; font-size: 13px; color: #4A5568;{{ bb }} display: flex; align-items: center; justify-content: flex-end; white-space: nowrap;">{{ "{:,}".format(t.qty) }}주</div>
+        <div style="padding: 11px 12px; font-size: 13px; color: #4A5568;{{ bb }} display: flex; align-items: center; justify-content: flex-end; white-space: nowrap;">{{ t.price|won }}</div>
+        <div style="padding: 11px 12px; font-size: 13px; color: #0A1547;{{ bb }} display: flex; align-items: center; justify-content: flex-end; white-space: nowrap;">{{ t.amount|won }}</div>
+        <div style="padding: 11px 12px; font-size: 13px; color: #8B92A2;{{ bb }} display: flex; align-items: center; justify-content: flex-end; white-space: nowrap;">{{ t.cost|won }}</div>
+        <div style="padding: 11px 12px; font-size: 13px; font-weight: 700; color: {{ t.sign|sign_color }};{{ bb }} display: flex; align-items: center; justify-content: flex-end; white-space: nowrap;">{{ t.realized_pnl|signed_won }}</div>
+        <div style="padding: 11px 0 11px 12px; font-size: 12px; line-height: 1.5; color: #4A5568;{{ bb }} display: flex; align-items: center;">{{ t.reason }}</div>
+        {% else %}
+        <div style="grid-column: 1 / -1; padding: 18px 0 8px; font-size: 13px; color: #8B92A2;">거래 없음 (백테스트 구간에 체결된 매매가 없습니다)</div>
+        {% endfor %}
+      </div>
+    </section>
+
+    {#- 용어 풀이 한 줄 #}
+    <div style="font-size: 12px; line-height: 1.7; color: #6E7688; padding: 2px 4px 0;">용어 · 최대 낙폭(MDD): 기간 중 고점 대비 가장 크게 떨어진 비율 · 초과수익(%p): 전략 수익률에서 {{ meta.benchmark.name }} 수익률을 뺀 값 · 실현 손익: 매도로 확정된 손익 · 평가손익: 기말 보유 종목의 미확정 손익 · buy&amp;hold: 첫날 사서 끝까지 보유 · 청산: 보유 종목을 모두 매도</div>
 
     {#- 한계 고지(meta.disclaimers) #}
     <div style="font-size: 11px; line-height: 1.7; color: #8B92A2; padding: 2px 4px 0;">{% for d in meta.disclaimers %}{{ d }}{% if not loop.last %} {% endif %}{% else %}해당 없음{% endfor %}</div>

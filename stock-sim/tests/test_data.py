@@ -160,6 +160,68 @@ def test_truncation_suspect_when_row_limit_hit(tmp_path):
     assert df.attrs["truncation"] is True
 
 
+def test_truncated_data_is_not_cached_so_issue_survives_rerun(tmp_path):
+    """phase3-1 Med 2: 잘림 의심 조각은 캐시에 쓰지 않는다 → 재실행에서 다시 받고 다시 경고한다."""
+    start, end = date(2026, 1, 1), date(2026, 5, 10)
+    days = pd.bdate_range("2026-01-01", periods=100)
+    rows = [_stock_row(d.strftime("%Y%m%d"), "10", "10", "10", "10") for d in days]
+    path = data.cache_path(tmp_path, "123456", start, end)
+    path.write_text("date,open,high,low,close,volume,value\n2026-01-02,1,1,1,1,1,1\n", encoding="utf-8")
+    client = FakeClient(stock_rows=rows)
+    first = data.load_daily("123456", start, end, tmp_path, client, refresh=True)
+    assert first.attrs["truncation"] is True and len(first) > 0
+    assert not path.exists()                                   # 예전 캐시도 남기지 않는다
+    with pytest.raises(FileNotFoundError):                     # 캐시가 없으니 오프라인 재실행은 불가
+        data.load_daily("123456", start, end, tmp_path, None)
+    again = data.load_daily("123456", start, end, tmp_path, client)
+    assert client.call_count == 2 and again.attrs["truncation"] is True
+
+
+def test_non_integer_price_issue_survives_cache_reload(tmp_path):
+    """phase3-1 Med 2: 수집 → 캐시 재로드 후에도 NON_INTEGER_PRICE 가 유지된다(보조 파일)."""
+    rows = [_stock_row("20260918", "50500.5", "51000", "50500", "51000"),
+            _stock_row("20260917", "50000", "50000", "50000", "50000")]
+    first = data.load_daily("123456", HAND_START, HAND_END, tmp_path, FakeClient(stock_rows=rows))
+    assert first.attrs["non_integer_price"] is True and first.attrs["from_cache"] is False
+    path = data.cache_path(tmp_path, "123456", HAND_START, HAND_END)
+    side = data.issues_path(path)
+    assert side.name == "123456_20260917_20260929.issues.json" and side.exists()
+    assert path.read_text(encoding="utf-8").splitlines()[0] == "date,open,high,low,close,volume,value"
+    again = data.load_daily("123456", HAND_START, HAND_END, tmp_path, ExplodingClient())
+    assert again.attrs["from_cache"] is True and again.attrs["non_integer_price"] is True
+    assert list(again["open"]) == [50000, 50501]
+    # 정수 가격으로 다시 받으면 예전 보조 파일은 지워진다
+    clean = [_stock_row("20260918", "50500", "51000", "50500", "51000")]
+    data.load_daily("123456", HAND_START, HAND_END, tmp_path, FakeClient(stock_rows=clean), refresh=True)
+    assert not side.exists()
+    assert data.load_daily("123456", HAND_START, HAND_END, tmp_path, None).attrs["non_integer_price"] is False
+
+
+def test_load_all_keeps_data_issues_after_cache_reload(tmp_path):
+    """load_all 수준: 첫 수집과 캐시 재실행의 data_issues 가 같다."""
+    start, end = HAND_START, HAND_END
+    rows = [_stock_row("20260918", "50500.5", "51000", "50500", "51000"),
+            _stock_row("20260917", "50000", "50000", "50000", "50000")]
+    idx = [{"stck_bsop_date": d, "bstp_nmix_oprc": "4000", "bstp_nmix_hgpr": "4000",
+            "bstp_nmix_lwpr": "4000", "bstp_nmix_prpr": "4000", "acml_vol": "1", "acml_tr_pbmn": "1"}
+           for d in ("20260917", "20260918")]
+    cfg = {"paths": {"cache_dir": tmp_path}, "kis": {"env": "DEV"},
+           "universe": [{"code": "123456", "name": "가상"}], "benchmark": {"code": "0001"}}
+    period = {"fetch_start": start, "end": end}
+    _, _, first, src1 = data.load_all(cfg, period, FakeClient(stock_rows=rows, index_rows=idx))
+    _, _, second, src2 = data.load_all(cfg, period, None)
+    codes = sorted((i["code"], i["stock"]) for i in first)
+    assert ("NON_INTEGER_PRICE", "123456") in codes
+    assert codes == sorted((i["code"], i["stock"]) for i in second)
+    assert src1["cache_hits"] == 0 and src2 == {"api_calls": 0, "cache_hits": 2}
+
+
+def test_data_module_does_not_import_numpy():
+    """phase3-1 Low 3: numpy 는 의존성 목록에 없으므로 직접 import 하지 않는다."""
+    text = (FIXTURES.parent.parent / "src" / "stock_sim" / "data.py").read_text(encoding="utf-8")
+    assert "import numpy" not in text and "np." not in text
+
+
 def test_build_calendar_is_sorted_union():
     prices = hand_prices()
     prices["BBB"] = prices["BBB"].iloc[1:]

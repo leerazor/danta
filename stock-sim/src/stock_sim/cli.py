@@ -95,6 +95,7 @@ def _run(args) -> int:
     except ValueError as exc:
         raise DataError(str(exc)) from None
     bench_info["equal_weight_return"] = metrics.equal_weight_return(prices, days)
+    bench_info["equal_weight_count"] = metrics.equal_weight_count(prices, days)
     period["rebalances"] = len(schedule)
     generated_at = datetime.now(KST).isoformat(timespec="seconds")
     result = report.build_result(cfg, period, bt, bench_df, bench_info, issues, source, generated_at)
