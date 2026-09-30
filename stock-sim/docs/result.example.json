@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "meta": {
     "is_example": true,
     "label": "STOCK-SIM · 모의투자 백테스트",
@@ -74,6 +74,8 @@
     "excess_return_sign": "pos",
     "equal_weight_return_pct": 1.124,
     "equal_weight_return_sign": "pos",
+    "excess_vs_equal_weight_pct": 0.7348,
+    "excess_vs_equal_weight_sign": "pos",
     "mdd_pct": -2.1491,
     "mdd_sign": "neg",
     "mdd_peak_date": "2026-09-04",
@@ -222,26 +224,26 @@
     {"id": 11, "date": "2026-09-28", "signal_date": "2026-09-23", "code": "005490", "name": "POSCO홀딩스", "side": "BUY", "side_label": "매수", "qty": 67, "price": 300000, "amount": 20100000, "cost": 3015, "net_cash": -20103015, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 5)"}
   ],
   "per_stock": [
-    {"code": "035420", "name": "NAVER", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 1024037, "total_pnl": 1024037, "return_pct": 5.1842, "contribution_pct": 1.024, "sign": "pos", "bar_pct": 100.0, "trade_value": 19750000, "trade_volume": 79},
-    {"code": "105560", "name": "KB금융", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 1, "win_rate_pct": 100.0, "realized_pnl": 906237, "unrealized_pnl": 0, "total_pnl": 906237, "return_pct": 4.559, "contribution_pct": 0.9062, "sign": "pos", "bar_pct": 88.5, "trade_value": 40704000, "trade_volume": 318},
-    {"code": "000660", "name": "SK하이닉스", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 816075, "total_pnl": 816075, "return_pct": 4.1844, "contribution_pct": 0.8161, "sign": "pos", "bar_pct": 79.69, "trade_value": 19500000, "trade_volume": 39},
-    {"code": "005930", "name": "삼성전자", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 744012, "total_pnl": 744012, "return_pct": 3.7344, "contribution_pct": 0.744, "sign": "pos", "bar_pct": 72.65, "trade_value": 19920000, "trade_volume": 249},
-    {"code": "005490", "name": "POSCO홀딩스", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 298485, "total_pnl": 298485, "return_pct": 1.4848, "contribution_pct": 0.2985, "sign": "pos", "bar_pct": 29.15, "trade_value": 20100000, "trade_volume": 67},
-    {"code": "068270", "name": "셀트리온", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": -507024, "total_pnl": -507024, "return_pct": -2.5146, "contribution_pct": -0.507, "sign": "neg", "bar_pct": 49.51, "trade_value": 20160000, "trade_volume": 112},
-    {"code": "005380", "name": "현대차", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 0, "win_rate_pct": 0.0, "realized_pnl": -582921, "unrealized_pnl": 0, "total_pnl": -582921, "return_pct": -2.9736, "contribution_pct": -0.5829, "sign": "neg", "bar_pct": 56.92, "trade_value": 38661000, "trade_volume": 98},
-    {"code": "000270", "name": "기아", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 0, "win_rate_pct": 0.0, "realized_pnl": -840059, "unrealized_pnl": 0, "total_pnl": -840059, "return_pct": -4.2208, "contribution_pct": -0.8401, "sign": "neg", "bar_pct": 82.03, "trade_value": 39004000, "trade_volume": 398},
-    {"code": "207940", "name": "삼성바이오로직스", "status": "no_trade", "status_label": "거래 없음", "trade_count": 0, "buy_count": 0, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 0, "total_pnl": 0, "return_pct": null, "contribution_pct": 0.0, "sign": "zero", "bar_pct": 0.0, "trade_value": 0, "trade_volume": 0},
-    {"code": "373220", "name": "LG에너지솔루션", "status": "excluded", "status_label": "제외(데이터 없음)", "trade_count": 0, "buy_count": 0, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 0, "total_pnl": 0, "return_pct": null, "contribution_pct": 0.0, "sign": "zero", "bar_pct": 0.0, "trade_value": 0, "trade_volume": 0}
+    {"code": "035420", "name": "NAVER", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": 1024037, "total_pnl": 1024037, "return_pct": 5.1842, "contribution_pct": 1.024, "sign": "pos", "bar_pct": 100.0, "trade_value": 19750000, "trade_volume": 79},
+    {"code": "105560", "name": "KB금융", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 1, "win_rate_pct": 100.0, "realized_pnl": 906237, "realized_pnl_sign": "pos", "unrealized_pnl": 0, "total_pnl": 906237, "return_pct": 4.559, "contribution_pct": 0.9062, "sign": "pos", "bar_pct": 88.5, "trade_value": 40704000, "trade_volume": 318},
+    {"code": "000660", "name": "SK하이닉스", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": 816075, "total_pnl": 816075, "return_pct": 4.1844, "contribution_pct": 0.8161, "sign": "pos", "bar_pct": 79.69, "trade_value": 19500000, "trade_volume": 39},
+    {"code": "005930", "name": "삼성전자", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": 744012, "total_pnl": 744012, "return_pct": 3.7344, "contribution_pct": 0.744, "sign": "pos", "bar_pct": 72.65, "trade_value": 19920000, "trade_volume": 249},
+    {"code": "005490", "name": "POSCO홀딩스", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": 298485, "total_pnl": 298485, "return_pct": 1.4848, "contribution_pct": 0.2985, "sign": "pos", "bar_pct": 29.15, "trade_value": 20100000, "trade_volume": 67},
+    {"code": "068270", "name": "셀트리온", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": -507024, "total_pnl": -507024, "return_pct": -2.5146, "contribution_pct": -0.507, "sign": "neg", "bar_pct": 49.51, "trade_value": 20160000, "trade_volume": 112},
+    {"code": "005380", "name": "현대차", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 0, "win_rate_pct": 0.0, "realized_pnl": -582921, "realized_pnl_sign": "neg", "unrealized_pnl": 0, "total_pnl": -582921, "return_pct": -2.9736, "contribution_pct": -0.5829, "sign": "neg", "bar_pct": 56.92, "trade_value": 38661000, "trade_volume": 98},
+    {"code": "000270", "name": "기아", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 0, "win_rate_pct": 0.0, "realized_pnl": -840059, "realized_pnl_sign": "neg", "unrealized_pnl": 0, "total_pnl": -840059, "return_pct": -4.2208, "contribution_pct": -0.8401, "sign": "neg", "bar_pct": 82.03, "trade_value": 39004000, "trade_volume": 398},
+    {"code": "207940", "name": "삼성바이오로직스", "status": "no_trade", "status_label": "거래 없음", "trade_count": 0, "buy_count": 0, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": 0, "total_pnl": 0, "return_pct": null, "contribution_pct": 0.0, "sign": "zero", "bar_pct": 0.0, "trade_value": 0, "trade_volume": 0},
+    {"code": "373220", "name": "LG에너지솔루션", "status": "excluded", "status_label": "제외(데이터 없음)", "trade_count": 0, "buy_count": 0, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "realized_pnl_sign": "zero", "unrealized_pnl": 0, "total_pnl": 0, "return_pct": null, "contribution_pct": 0.0, "sign": "zero", "bar_pct": 0.0, "trade_value": 0, "trade_volume": 0}
   ],
   "top_contributors": {
     "items": [
       {"rank": 1, "code": "035420", "name": "NAVER", "pnl": 1024037, "sign": "pos", "bar_pct": 100.0},
       {"rank": 2, "code": "105560", "name": "KB금융", "pnl": 906237, "sign": "pos", "bar_pct": 88.5},
-      {"rank": 3, "code": "000660", "name": "SK하이닉스", "pnl": 816075, "sign": "pos", "bar_pct": 79.69},
-      {"rank": 4, "code": "005930", "name": "삼성전자", "pnl": 744012, "sign": "pos", "bar_pct": 72.65},
-      {"rank": 5, "code": "005490", "name": "POSCO홀딩스", "pnl": 298485, "sign": "pos", "bar_pct": 29.15}
+      {"rank": 3, "code": "000270", "name": "기아", "pnl": -840059, "sign": "neg", "bar_pct": 82.03},
+      {"rank": 4, "code": "000660", "name": "SK하이닉스", "pnl": 816075, "sign": "pos", "bar_pct": 79.69},
+      {"rank": 5, "code": "005930", "name": "삼성전자", "pnl": 744012, "sign": "pos", "bar_pct": 72.65}
     ],
-    "note": "상위 5종목 손익 합계 +3,788,846원, 손실 3종목 합계 -1,930,004원입니다."
+    "note": "이익 5종목 합계 +3,788,846원, 손실 3종목 합계 -1,930,004원 → 총손익 +1,858,842원"
   },
   "weekly_flow": [
     {
@@ -317,6 +319,9 @@
     "target_return_pct": 2.0,
     "actual_return_pct": 1.8588,
     "sign": "pos",
+    "current_return_pct": 1.8588,
+    "current_return_sign": "pos",
+    "gap_pct": -0.1412,
     "target_equity": 102000000,
     "gap_amount": 141158,
     "achieved": false,
@@ -326,6 +331,6 @@
       {"key": "realized", "label": "실현", "width_pct": 0.0, "color": "#1428A0"},
       {"key": "unrealized", "label": "미실현", "width_pct": 92.94, "color": "#7C9BFF"}
     ],
-    "caption": "목표 +2.00% 대비 92.94% 달성. 목표 평가금액까지 141,158원 남았습니다."
+    "caption": "목표 +2.00%에 0.14%p 못 미쳤습니다(현재 +1.86%). 목표 평가금액까지 141,158원 부족."
   }
 }

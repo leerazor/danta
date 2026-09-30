@@ -43,11 +43,12 @@ def _rebalance_fills(calendar: list[date], start: date, end: date, params: dict)
     if params.get("rebalance", "weekly") == "daily" or params.get("mode") == "breakout":
         return {calendar[i] for i in range(1, len(calendar)) if start <= calendar[i] <= end}
     every = int(params.get("every_weeks", 1))
+    offset = int(params.get("week_offset", 0))     # 위상 점검용: 첫 리밸런싱을 offset주 늦춘다
     out, n = set(), 0
     for i in range(1, len(calendar)):
         p, d = calendar[i - 1], calendar[i]
         if start <= d <= end and _iso_week(p) != _iso_week(d):
-            if n % every == 0:
+            if n >= offset and (n - offset) % every == 0:
                 out.add(d)
             n += 1
     return out
@@ -179,7 +180,12 @@ def targets(prices: dict[str, pd.DataFrame], calendar: list[date],
     index = {d: i for i, d in enumerate(calendar)}
     top_n = int(params["top_n"])
     breakout = params.get("mode") == "breakout"
-    reb = (_rebalance_fills(calendar, schedule_[0][1], schedule_[-1][1], params) if schedule_ else set())
+    if not schedule_:
+        reb = set()
+    elif _daily_check(params):     # 매일 점검 일정: 첫 체결일이 구간 첫 거래일이라 같은 기준으로 다시 센다
+        reb = _rebalance_fills(calendar, schedule_[0][1], schedule_[-1][1], params)
+    else:                          # 리밸런싱 체결일만 담긴 일정
+        reb = {fill for _, fill in schedule_}
     held: dict[str, float] = {}        # code -> 보유 중 종가 고점
     rows: list[dict] = []
     for sig, fill in schedule_:
