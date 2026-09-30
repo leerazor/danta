@@ -1,0 +1,27 @@
+[project]
+name = "stock-sim"
+version = "0.1.0"
+description = "KIS 과거 일봉 기반 주식 자동매매 백테스트 시뮬레이션 (주문·계좌 API 미사용)"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "requests",
+    "python-dotenv",
+    "pandas",
+    "pyyaml",
+    "jinja2",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+# 프로젝트를 venv에 설치하지 않는다. 편집 가능 설치는 site-packages에 저장소 절대 경로가 담긴
+# .pth를 만드는데, Python 3.11은 .pth를 로캘 인코딩(cp949)으로 읽어 한글 경로에서 인터프리터가
+# 시작하지 못한다(UnicodeDecodeError). 그래서 src/는 PYTHONPATH(실행)와 pytest pythonpath(테스트)로 잡는다.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["network: 실 API 호출"]
+addopts = "-m 'not network'"

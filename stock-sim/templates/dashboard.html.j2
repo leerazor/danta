@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ meta.title }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;900&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #EEF0F5; color: #0A1547;
+         font-family: "Noto Sans KR", "Malgun Gothic", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: #1428A0; text-decoration: none; }
+  a:hover { color: #0A1547; }
+  table { border-collapse: collapse; }
+
+</style>
+</head>
+<body>
+{#- 이 템플릿은 result.json 값을 표시만 한다. 합계·비율·좌표 계산 금지(CLAUDE.md 8절). -#}
+<div style="background: #EEF0F5; color: #0A1547; font-family: 'Noto Sans KR', sans-serif; padding: 0 0 44px;">
+
+  {#- 1. 헤더 라벨·제목·백테스트 구간 / 2. 헤더 KPI 4개 #}
+  <header style="background: #0A1547; padding: 26px 44px 30px; display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-size: 11px; letter-spacing: 0.22em; color: #7C9BFF; font-weight: 700;">{{ meta.label }}</div>
+        <h1 style="margin: 0; font-family: 'Gothic A1', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.01em; color: #FFFFFF;">{{ meta.title }}</h1>
+        <div style="font-size: 13px; color: #98A3D2;">백테스트 구간 {{ meta.period.start }} ~ {{ meta.period.end }} · {{ meta.period.trading_days }}거래일 · {{ meta.strategy.label }} · 생성 {{ meta.generated_at[:10] }}{% if meta.is_example %} · 예시 데이터(가짜 수치){% endif %}</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; background: rgba(200,210,240,0.12); border: 1px solid rgba(200,210,240,0.24); border-radius: 8px; overflow: hidden;">
+          <div style="padding: 9px 18px; font-size: 13px; color: #AEB8DE;">{{ meta.data_source.provider }} {{ meta.env }}</div>
+          <div style="padding: 9px 18px; font-size: 13px; background: #1428A0; color: #FFFFFF; font-weight: 500;">{{ meta.period.months }}개월</div>
+          <div style="padding: 9px 18px; font-size: 13px; color: #AEB8DE;">벤치마크 {{ meta.benchmark.name }}</div>
+        </div>
+        <div style="padding: 10px 20px; border-radius: 8px; background: #FFFFFF; color: #0A1547; font-size: 13px; font-weight: 700;">초기 자본 {{ meta.capital|won }}</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 34px; flex-wrap: wrap; border-top: 1px solid rgba(200,210,240,0.2); padding-top: 20px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <div style="font-size: 13px; color: #98A3D2;">누적 수익률</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ summary.total_return_pct|signed_pct }}</div>
+        <div style="font-size: 12px; color: #AEB8DE;">최종 {{ summary.final_equity|won }}</div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <div style="font-size: 13px; color: #98A3D2;">{{ meta.benchmark.name }} 대비 초과수익</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ summary.excess_return_pct|signed_pct }}p</div>
+        <div style="font-size: 12px; color: #AEB8DE;">{{ meta.benchmark.name }} {{ summary.benchmark_return_pct|signed_pct }}</div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <div style="font-size: 13px; color: #98A3D2;">MDD</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ summary.mdd_pct|signed_pct }}</div>
+        <div style="font-size: 12px; color: #AEB8DE;">{% if summary.mdd_trough_date is none %}낙폭 없음{% else %}{% if summary.mdd_peak_date is none %}시작{% else %}{{ summary.mdd_peak_date }}{% endif %} → {{ summary.mdd_trough_date }}{% endif %}</div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <div style="font-size: 13px; color: #98A3D2;">거래 횟수</div>
+        <div style="font-family: 'Gothic A1', sans-serif; font-size: 18px; font-weight: 700; color: #FFFFFF;">{{ "{:,}".format(summary.trade_count) }}회</div>
+        <div style="font-size: 12px; color: #AEB8DE;">{% if flags.no_trades %}거래 없음{% else %}매수 {{ "{:,}".format(summary.buy_count) }} · 매도 {{ "{:,}".format(summary.sell_count) }}{% endif %}</div>
+      </div>
+    </div>
+  </header>
+
+  <main style="padding: 26px 44px 0; display: flex; flex-direction: column; gap: 20px;">
+
+    {#- 3. KPI 카드 5개 #}
+    <section style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px;">
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: #6E7688;">최종 평가금액</div>
+        <div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;">
+          <div style="font-family: 'Gothic A1', sans-serif; font-size: 26px; font-weight: 900; line-height: 1; white-space: nowrap;">{{ summary.final_equity|won }}</div>
+          <div style="font-size: 12px; color: {{ summary.total_return_sign|sign_color }}; font-weight: 700;">{{ summary.total_return_pct|signed_pct }}</div>
+        </div>
+        <svg viewBox="{{ charts.sparklines.viewbox }}" preserveAspectRatio="none" role="img" aria-label="누적 수익률 추이" style="width: 100%; height: 44px; margin-top: auto;">
+          <polyline points="{{ charts.sparklines.equity }}" fill="none" stroke="#1428A0" stroke-width="2.5" stroke-linejoin="round"></polyline>
+        </svg>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: #6E7688;">실현 손익</div>
+        <div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;">
+          <div style="font-family: 'Gothic A1', sans-serif; font-size: 26px; font-weight: 900; line-height: 1; white-space: nowrap; color: {{ summary.realized_pnl_sign|sign_color }};">{{ summary.realized_pnl|signed_won }}</div>
+          <div style="font-size: 12px; color: {{ summary.unrealized_pnl_sign|sign_color }}; font-weight: 700;">평가 {{ summary.unrealized_pnl|signed_won }}</div>
+        </div>
+        <svg viewBox="{{ charts.sparklines.viewbox }}" preserveAspectRatio="none" role="img" aria-label="누적 실현 손익 추이" style="width: 100%; height: 44px; margin-top: auto;">
+          <polyline points="{{ charts.sparklines.realized_pnl }}" fill="none" stroke="#4B5CC0" stroke-width="2.5" stroke-linejoin="round"></polyline>
+        </svg>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 20px 22px; display: flex; align-items: center; gap: 18px;">
+        <div style="width: 78px; height: 78px; border-radius: 50%; background: {{ charts.win_donut.conic_gradient }}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <div style="width: 58px; height: 58px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Gothic A1', sans-serif; font-size: 13px; font-weight: 900;">{{ summary.win_rate_pct|pct }}</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 13px; color: #6E7688;">승률</div>
+          <div style="font-size: 13px; color: #0A1547; font-weight: 500;">{% if flags.no_closed_trades %}청산 없음{% else %}{{ "{:,}".format(summary.win_count) }}승 {{ "{:,}".format(summary.loss_count) }}패{% endif %}</div>
+          <div style="font-size: 12px; color: #8B92A2;">청산 {{ "{:,}".format(summary.closed_count) }}건</div>
+        </div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: #6E7688;">보유 종목 수</div>
+        <div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;">
+          <div style="font-family: 'Gothic A1', sans-serif; font-size: 34px; font-weight: 900; line-height: 1;">{{ "{:,}".format(summary.holding_count) }}종목</div>
+          <div style="font-size: 12px; color: #6E7688; font-weight: 700;">최대 {{ "{:,}".format(summary.max_positions) }}</div>
+        </div>
+        <svg viewBox="{{ charts.sparklines.viewbox }}" preserveAspectRatio="none" role="img" aria-label="보유 종목 수 추이" style="width: 100%; height: 44px; margin-top: auto;">
+          <polyline points="{{ charts.sparklines.holdings }}" fill="none" stroke="#7C9BFF" stroke-width="2.5" stroke-linejoin="round"></polyline>
+        </svg>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: #6E7688;">총 거래대금</div>
+        <div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;">
+          <div style="font-family: 'Gothic A1', sans-serif; font-size: 26px; font-weight: 900; line-height: 1; white-space: nowrap;">{{ summary.total_trade_value|won }}</div>
+          <div style="font-size: 12px; color: #6E7688; font-weight: 700;">{% if flags.no_trades %}거래 없음{% else %}{{ "{:,}".format(summary.total_trade_volume) }}주{% endif %}</div>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: flex-end; height: 44px; margin-top: auto;">
+          {%- for b in charts.trade_value_bars %}
+          <div title="{{ b.label }} 주 {{ b.value|won }}" style="flex: 1; height: {{ b.height_pct }}%; background: {{ b.color }}; border-radius: 2px 2px 0 0;"></div>
+          {%- endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section style="display: grid; grid-template-columns: 1.9fr 1fr; gap: 18px; align-items: stretch;">
+
+      {#- 4. 자산 곡선 vs 벤치마크 #}
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px 20px; display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 16px; font-weight: 700;">자산 곡선과 벤치마크 buy&amp;hold</div>
+            <div style="font-size: 13px; color: #6E7688;">단위: {{ charts.equity.unit }} · {{ meta.period.start }} ~ {{ meta.period.end }}</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 18px;">
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <div style="width: 14px; height: 3px; background: #1428A0;"></div>
+              <div style="font-size: 12px; color: #6E7688;">전략</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <div style="width: 14px; height: 3px; background: #98A3D2;"></div>
+              <div style="font-size: 12px; color: #6E7688;">{{ meta.benchmark.name }} buy&amp;hold</div>
+            </div>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 44px 1fr; gap: 10px;">
+          <div style="display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; height: 250px; font-size: 11px; color: #8B92A2;">
+            {%- for v in charts.equity.y_labels %}
+            <div>{{ "%.1f"|format(v) }}</div>
+            {%- endfor %}
+          </div>
+          <div style="position: relative; height: 250px; border-left: 1px solid #E1E4EC; border-bottom: 1px solid #DCE0E9;">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between;">
+              <div style="height: 1px; background: #F1F2F7;"></div>
+              <div style="height: 1px; background: #F1F2F7;"></div>
+              <div style="height: 1px; background: #F1F2F7;"></div>
+              <div style="height: 1px; background: #F1F2F7;"></div>
+              <div style="height: 1px; background: transparent;"></div>
+            </div>
+            <div style="position: absolute; left: 0; right: 0; top: {{ charts.equity.zero_line_top_pct }}%; height: 1px; background: #C2C8E8;"></div>
+            <svg viewBox="{{ charts.equity.viewbox }}" preserveAspectRatio="none" role="img" aria-label="전략과 벤치마크의 누적 수익률 곡선" style="position: absolute; inset: 0; width: 100%; height: 250px;">
+              <defs>
+                <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#1428A0" stop-opacity="0.22"></stop>
+                  <stop offset="100%" stop-color="#1428A0" stop-opacity="0.02"></stop>
+                </linearGradient>
+              </defs>
+              <path d="{{ charts.equity.equity_area_path }}" fill="url(#areaFill)"></path>
+              <polyline points="{{ charts.equity.equity_points }}" fill="none" stroke="#1428A0" stroke-width="3" stroke-linejoin="round"></polyline>
+              <polyline points="{{ charts.equity.benchmark_points }}" fill="none" stroke="#98A3D2" stroke-width="2" stroke-dasharray="8 7"></polyline>
+            </svg>
+          </div>
+          <div></div>
+          <div style="position: relative; height: 26px;">
+            {%- for x in charts.equity.x_labels %}
+            <div style="position: absolute; top: 10px; left: {{ x.x_pct }}%; transform: translateX(-50%); font-size: 11px; color: #8B92A2; white-space: nowrap;">{{ x.label }}</div>
+            {%- endfor %}
+          </div>
+        </div>
+        <div style="border-top: 1px solid #EEF0F5; padding-top: 16px; font-size: 13px; line-height: 1.6; color: #4A5568;">{{ charts.equity.caption }}</div>
+      </div>
+
+      {#- 5. 포지션 비중 도넛 #}
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 22px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="font-size: 16px; font-weight: 700;">포지션 비중</div>
+          <div style="font-size: 13px; color: #6E7688;">{{ allocation.as_of }} 기준 · 전체 {{ allocation.total|won }}</div>
+        </div>
+        <div style="display: flex; justify-content: center; padding: 4px 0 8px;">
+          <div style="width: 176px; height: 176px; border-radius: 50%; background: {{ allocation.conic_gradient }}; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 116px; height: 116px; border-radius: 50%; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+              <div style="font-family: 'Gothic A1', sans-serif; font-size: 24px; font-weight: 900;">{{ allocation.center.value_pct|pct }}</div>
+              <div style="font-size: 12px; color: #6E7688;">{{ allocation.center.label }}</div>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          {%- for s in allocation.segments %}
+          <div style="display: grid; grid-template-columns: 12px 1fr auto auto; gap: 12px; align-items: center;">
+            <div style="width: 10px; height: 10px; border-radius: 2px; background: {{ s.color }};"></div>
+            <div style="font-size: 13px; color: #2D3A52;">{{ s.label }}</div>
+            <div style="font-size: 12px; color: #8B92A2;">{{ s.value|won }}</div>
+            <div style="font-size: 13px; font-weight: 700; min-width: 50px; text-align: right;">{{ s.weight_pct|pct }}</div>
+          </div>
+          {%- endfor %}
+          {%- if flags.no_positions %}
+          <div style="font-size: 12px; color: #8B92A2;">기말 보유 종목 없음(전액 현금)</div>
+          {%- endif %}
+        </div>
+      </div>
+    </section>
+
+    <section style="display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 18px; align-items: stretch;">
+
+      {#- 6. 주차별 매매 구성 스택 바 #}
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px 20px; display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 16px; font-weight: 700;">주차별 매매 구성</div>
+            <div style="font-size: 13px; color: #6E7688;">주간 매수·매도 거래대금 + 주말 보유·현금, 100% 기준</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            {%- for s in weekly_flow[0].segments %}
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <div style="width: 10px; height: 10px; border-radius: 2px; background: {{ s.color }};"></div>
+              <div style="font-size: 11px; color: #6E7688;">{{ s.label }}</div>
+            </div>
+            {%- endfor %}
+          </div>
+        </div>
+        <div style="display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 20px; height: 210px; align-items: stretch;">
+          {%- for w in weekly_flow %}
+          <div style="display: flex; flex-direction: column; border-radius: 4px; overflow: hidden;">
+            {%- for s in w.segments %}
+            <div title="{{ w.label }} 주 {{ s.label }} {{ s.value|won }} ({{ s.height_pct|pct }})" style="height: {{ s.height_pct }}%; background: {{ s.color }};"></div>
+            {%- endfor %}
+          </div>
+          {%- endfor %}
+        </div>
+        <div style="display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 20px;">
+          {%- for w in weekly_flow %}
+          <div style="font-size: 11px; color: #8B92A2; text-align: center;">{{ w.label }}</div>
+          {%- endfor %}
+        </div>
+      </div>
+
+      {#- 7. 종목별 손익 기여 상위 5 #}
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 22px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="font-size: 16px; font-weight: 700;">종목별 손익 기여 상위 5</div>
+          <div style="font-size: 13px; color: #6E7688;">총손익(실현 + 평가) · 단위 원</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+          {%- for it in top_contributors['items'] %}
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div style="font-size: 13px; color: #2D3A52;">{{ it.name }}</div>
+              <div style="font-family: 'Gothic A1', sans-serif; font-size: 14px; font-weight: 700; color: {{ it.sign|sign_color }};">{{ it.pnl|signed_won }}</div>
+            </div>
+            <div style="height: 8px; border-radius: 4px; background: #F1F2F7;"><div style="width: {{ it.bar_pct }}%; height: 8px; border-radius: 4px; background: {{ it.sign|sign_color }};"></div></div>
+          </div>
+          {%- else %}
+          <div style="font-size: 13px; color: #8B92A2;">해당 없음 (거래한 종목이 없습니다)</div>
+          {%- endfor %}
+        </div>
+        <div style="margin-top: auto; border-top: 1px solid #EEF0F5; padding-top: 16px; font-size: 13px; line-height: 1.6; color: #4A5568;">{{ top_contributors.note }}</div>
+      </div>
+
+      {#- 8. 분석 요약(다크 패널) #}
+      <div style="background: #0A1547; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px;">
+        <div style="font-size: 16px; font-weight: 700; color: #FFFFFF;">분석 요약</div>
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          {%- for i in insights %}
+          <div style="display: grid; grid-template-columns: 26px 1fr; gap: 14px; align-items: start;">
+            <div style="font-family: 'Gothic A1', sans-serif; font-size: 15px; font-weight: 900; color: #7C9BFF;">{{ i.no }}</div>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <div style="font-size: 14px; font-weight: 500; color: #FFFFFF; line-height: 1.5;">{{ i.title }}</div>
+              <div style="font-size: 12px; line-height: 1.6; color: #AEB8DE;">{{ i.detail }}</div>
+            </div>
+          </div>
+          {%- endfor %}
+        </div>
+        <div style="margin-top: auto; background: rgba(124,155,255,0.14); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 11px; letter-spacing: 0.14em; color: #98A3D2; font-weight: 700;">{{ next_action.label }}</div>
+          <div style="font-size: 13px; line-height: 1.6; color: #FFFFFF;">{{ next_action.text }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: grid; grid-template-columns: 1.9fr 1fr; gap: 18px; align-items: start;">
+
+      {#- 9. 종목별 상세 테이블 #}
+      <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 28px 14px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 16px; font-weight: 700;">종목별 상세</div>
+            <div style="font-size: 13px; color: #6E7688;">거래 횟수 · 총손익 · 승률 · 실현손익 · 수익률</div>
+          </div>
+          <div style="font-size: 13px; color: #1428A0; font-weight: 500;">유니버스 {{ meta.universe|length }}종목</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1.4fr 0.6fr 1.9fr 0.7fr 1fr 0.8fr;">
+          <div style="padding: 10px 12px 10px 0; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">종목</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">거래</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">총손익(실현 + 평가)</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">승률</div>
+          <div style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9;">실현손익</div>
+          <div style="padding: 10px 0 10px 12px; font-size: 12px; font-weight: 700; color: #8B92A2; border-bottom: 1px solid #DCE0E9; text-align: right;">수익률</div>
+          {% for r in per_stock %}
+          {%- set bb = "" if loop.last else " border-bottom: 1px solid #EEF0F5;" %}
+          <div style="padding: 12px 12px 12px 0; font-size: 14px; font-weight: 500;{{ bb }} display: flex; flex-direction: column; gap: 2px;">
+            <div>{{ r.name }}</div>
+            <div style="font-size: 11px; font-weight: 400; color: #8B92A2;">{{ r.code }} · {{ r.status_label }}</div>
+          </div>
+          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center;">{{ "{:,}".format(r.trade_count) }}회</div>
+          <div style="padding: 12px 12px;{{ bb }} display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1; height: 6px; border-radius: 3px; background: #F1F2F7;"><div style="width: {{ r.bar_pct }}%; height: 6px; border-radius: 3px; background: {{ r.sign|sign_color }};"></div></div>
+            <div style="font-size: 13px; font-weight: 700; width: 92px; text-align: right; white-space: nowrap; color: {{ r.sign|sign_color }};">{% if r.trade_count %}{{ r.total_pnl|signed_won }}{% else %}–{% endif %}</div>
+          </div>
+          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center;">{{ r.win_rate_pct|pct }}</div>
+          <div style="padding: 12px 12px; font-size: 14px; color: #4A5568;{{ bb }} display: flex; align-items: center; white-space: nowrap;">{% if r.trade_count %}{{ r.realized_pnl|signed_won }}{% else %}–{% endif %}</div>
+          <div style="padding: 12px 0 12px 12px; font-size: 13px; color: {{ r.sign|sign_color }}; font-weight: 700;{{ bb }} display: flex; align-items: center; justify-content: flex-end;">{{ r.return_pct|signed_pct }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        {#- 10. 리스크 알림 #}
+        <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 26px; display: flex; flex-direction: column; gap: 18px;">
+          <div style="font-size: 16px; font-weight: 700;">점검 필요</div>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            {%- if flags.only_low_sample_alert %}
+            <div style="font-size: 13px; color: #4A5568;">특이 리스크 없음</div>
+            {%- endif %}
+            {%- for a in alerts %}
+            <div style="display: grid; grid-template-columns: 8px 1fr; gap: 14px; align-items: start;">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: {{ a.color }}; margin-top: 6px;"></div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="font-size: 14px; font-weight: 500;">{{ a.title }}</div>
+                {%- if a.detail or a.date %}
+                <div style="font-size: 12px; color: #8B92A2;">{{ a.detail }}{% if a.detail and a.date %} · {% endif %}{% if a.date %}{{ a.date }}{% endif %}</div>
+                {%- endif %}
+              </div>
+            </div>
+            {%- else %}
+            <div style="font-size: 13px; color: #8B92A2;">해당 없음</div>
+            {%- endfor %}
+          </div>
+        </div>
+        {#- 11. 목표 수익률 대비 진척 #}
+        <div style="background: #FFFFFF; border: 1px solid #E1E4EC; border-radius: 12px; padding: 24px 26px; display: flex; flex-direction: column; gap: 18px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 16px; font-weight: 700;">목표 수익률 진척</div>
+            <div style="font-size: 13px; color: #6E7688;">목표 {{ target.target_return_pct|signed_pct }} · 목표 평가금액 {{ target.target_equity|won }}</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="height: 14px; border-radius: 7px; background: #F1F2F7; overflow: hidden; display: flex;">
+              {%- for b in target.bar_segments %}
+              <div title="{{ b.label }} {{ b.width_pct|pct }}" style="width: {{ b.width_pct }}%; background: {{ b.color }};"></div>
+              {%- endfor %}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div style="font-size: 12px; color: #6E7688;">{% for b in target.bar_segments %}{{ b.label }} {{ b.width_pct|pct }}{% if not loop.last %} · {% endif %}{% endfor %} · 실제 <span style="color: {{ target.sign|sign_color }}; font-weight: 700;">{{ target.actual_return_pct|signed_pct }}</span></div>
+              <div style="font-family: 'Gothic A1', sans-serif; font-size: 16px; font-weight: 700;">{{ target.progress_pct|pct }}</div>
+            </div>
+          </div>
+          <div style="border-top: 1px solid #EEF0F5; padding-top: 14px; font-size: 13px; line-height: 1.6; color: #4A5568;">{{ target.caption }}</div>
+        </div>
+      </div>
+    </section>
+
+    {#- 한계 고지(meta.disclaimers) #}
+    <div style="font-size: 11px; line-height: 1.7; color: #8B92A2; padding: 2px 4px 0;">{% for d in meta.disclaimers %}{{ d }}{% if not loop.last %} {% endif %}{% else %}해당 없음{% endfor %}</div>
+  </main>
+</div>
+</body>
+</html>

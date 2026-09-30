@@ -1,0 +1,331 @@
+{
+  "schema_version": "1.0",
+  "meta": {
+    "is_example": true,
+    "label": "STOCK-SIM · 모의투자 백테스트",
+    "title": "주식 자동매매 시뮬레이션 대시보드",
+    "period": {
+      "requested_start": "2026-08-29",
+      "start": "2026-08-31",
+      "end": "2026-09-29",
+      "trading_days": 20,
+      "months": 1
+    },
+    "generated_at": "2026-09-30T09:15:00+09:00",
+    "env": "DEV",
+    "strategy": {
+      "name": "momentum_topn",
+      "label": "20일 수익률 상위 5종목 · 주간 리밸런싱",
+      "params": {"lookback_days": 20, "top_n": 5, "rebalance": "weekly"}
+    },
+    "data_source": {
+      "provider": "KIS",
+      "env": "DEV",
+      "adjusted_price": true,
+      "fetch_start": "2026-05-31",
+      "fetch_end": "2026-09-29",
+      "api_calls": 13,
+      "cache_hits": 0,
+      "excluded": [
+        {"code": "373220", "name": "LG에너지솔루션", "reason": "조회 결과 0건"}
+      ]
+    },
+    "universe": [
+      {"code": "005930", "name": "삼성전자"},
+      {"code": "000660", "name": "SK하이닉스"},
+      {"code": "373220", "name": "LG에너지솔루션"},
+      {"code": "207940", "name": "삼성바이오로직스"},
+      {"code": "005380", "name": "현대차"},
+      {"code": "000270", "name": "기아"},
+      {"code": "068270", "name": "셀트리온"},
+      {"code": "035420", "name": "NAVER"},
+      {"code": "105560", "name": "KB금융"},
+      {"code": "005490", "name": "POSCO홀딩스"}
+    ],
+    "benchmark": {"code": "0001", "name": "KOSPI", "base_price": 4000.0, "base_kind": "d1_open"},
+    "capital": 100000000,
+    "max_positions": 5,
+    "costs": {"buy_cost_pct": 0.015, "sell_cost_pct": 0.215, "slippage_pct": 0.0},
+    "disclaimers": [
+      "1개월(20거래일, 리밸런싱 5회) 표본은 통계적 의미가 약합니다. 수익률·승률·MDD는 우연의 영향이 큽니다.",
+      "파라미터 최적화를 하지 않았습니다. 20일·5종목·주간은 사전에 정한 값입니다.",
+      "유니버스 10종목은 현재 시총 상위 대형주라 생존·선택 편향이 있습니다.",
+      "시가 전량 체결, 슬리피지 0, 시장충격 없음, 당일 매도 대금 즉시 재사용을 가정했습니다.",
+      "배당, 세후 수익, 최소 수수료는 반영하지 않았습니다. 벤치마크에는 비용이 없습니다.",
+      "시뮬레이션 결과이며 투자 권유가 아닙니다. 이 파일의 수치는 예시용 가짜 데이터입니다."
+    ]
+  },
+  "flags": {
+    "no_trades": false,
+    "no_closed_trades": false,
+    "no_positions": false,
+    "only_low_sample_alert": false
+  },
+  "summary": {
+    "initial_capital": 100000000,
+    "final_equity": 101858842,
+    "total_pnl": 1858842,
+    "total_pnl_sign": "pos",
+    "total_return_pct": 1.8588,
+    "total_return_sign": "pos",
+    "benchmark_return_pct": 0.85,
+    "benchmark_return_sign": "pos",
+    "excess_return_pct": 1.0088,
+    "excess_return_sign": "pos",
+    "equal_weight_return_pct": 1.124,
+    "equal_weight_return_sign": "pos",
+    "mdd_pct": -2.1491,
+    "mdd_sign": "neg",
+    "mdd_peak_date": "2026-09-04",
+    "mdd_trough_date": "2026-09-14",
+    "trade_count": 11,
+    "buy_count": 8,
+    "sell_count": 3,
+    "closed_count": 3,
+    "win_count": 1,
+    "loss_count": 2,
+    "win_rate_pct": 33.3333,
+    "payoff_ratio": 1.2737,
+    "max_loss_streak": 1,
+    "realized_pnl": -516743,
+    "realized_pnl_sign": "neg",
+    "unrealized_pnl": 2375585,
+    "unrealized_pnl_sign": "pos",
+    "total_cost": 150658,
+    "holding_count": 5,
+    "max_positions": 5,
+    "cash": 38342,
+    "cash_weight_pct": 0.0376,
+    "total_trade_value": 217799000,
+    "buy_value": 158805000,
+    "sell_value": 58994000,
+    "total_trade_volume": 1360,
+    "turnover_pct": 108.4614
+  },
+  "equity_curve": [
+    {"date": "2026-08-31", "equity": 100132781, "cash": 1190181, "holdings_value": 98942600, "return_pct": 0.1328, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-01", "equity": 100452281, "cash": 1190181, "holdings_value": 99262100, "return_pct": 0.4523, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-02", "equity": 100071281, "cash": 1190181, "holdings_value": 98881100, "return_pct": 0.0713, "drawdown_pct": -0.3793, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-03", "equity": 100762381, "cash": 1190181, "holdings_value": 99572200, "return_pct": 0.7624, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-04", "equity": 100998081, "cash": 1190181, "holdings_value": 99807900, "return_pct": 0.9981, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-07", "equity": 100702481, "cash": 1190181, "holdings_value": 99512300, "return_pct": 0.7025, "drawdown_pct": -0.2927, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-08", "equity": 100105981, "cash": 1190181, "holdings_value": 98915800, "return_pct": 0.106, "drawdown_pct": -0.8833, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-09", "equity": 99416481, "cash": 1190181, "holdings_value": 98226300, "return_pct": -0.5835, "drawdown_pct": -1.566, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-10", "equity": 99250181, "cash": 1190181, "holdings_value": 98060000, "return_pct": -0.7498, "drawdown_pct": -1.7306, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-11", "equity": 98999381, "cash": 1190181, "holdings_value": 97809200, "return_pct": -1.0006, "drawdown_pct": -1.9789, "position_count": 5, "realized_pnl_cum": 0},
+    {"date": "2026-09-14", "equity": 98827544, "cash": 500144, "holdings_value": 98327400, "return_pct": -1.1725, "drawdown_pct": -2.1491, "position_count": 5, "realized_pnl_cum": -840059},
+    {"date": "2026-09-15", "equity": 99610844, "cash": 500144, "holdings_value": 99110700, "return_pct": -0.3892, "drawdown_pct": -1.3735, "position_count": 5, "realized_pnl_cum": -840059},
+    {"date": "2026-09-16", "equity": 100340044, "cash": 500144, "holdings_value": 99839900, "return_pct": 0.34, "drawdown_pct": -0.6515, "position_count": 5, "realized_pnl_cum": -840059},
+    {"date": "2026-09-17", "equity": 100675344, "cash": 500144, "holdings_value": 100175200, "return_pct": 0.6753, "drawdown_pct": -0.3195, "position_count": 5, "realized_pnl_cum": -840059},
+    {"date": "2026-09-18", "equity": 101109344, "cash": 500144, "holdings_value": 100609200, "return_pct": 1.1093, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": -840059},
+    {"date": "2026-09-21", "equity": 101303338, "cash": 1121338, "holdings_value": 100182000, "return_pct": 1.3033, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": 66178},
+    {"date": "2026-09-22", "equity": 100863638, "cash": 1121338, "holdings_value": 99742300, "return_pct": 0.8636, "drawdown_pct": -0.434, "position_count": 5, "realized_pnl_cum": 66178},
+    {"date": "2026-09-23", "equity": 101211238, "cash": 1121338, "holdings_value": 100089900, "return_pct": 1.2112, "drawdown_pct": -0.0909, "position_count": 5, "realized_pnl_cum": 66178},
+    {"date": "2026-09-28", "equity": 101387342, "cash": 38342, "holdings_value": 101349000, "return_pct": 1.3873, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": -516743},
+    {"date": "2026-09-29", "equity": 101858842, "cash": 38342, "holdings_value": 101820500, "return_pct": 1.8588, "drawdown_pct": 0.0, "position_count": 5, "realized_pnl_cum": -516743}
+  ],
+  "benchmark": [
+    {"date": "2026-08-31", "close": 4008.0, "value": 100200000, "return_pct": 0.2},
+    {"date": "2026-09-01", "close": 4012.0, "value": 100300000, "return_pct": 0.3},
+    {"date": "2026-09-02", "close": 4020.0, "value": 100500000, "return_pct": 0.5},
+    {"date": "2026-09-03", "close": 4008.0, "value": 100200000, "return_pct": 0.2},
+    {"date": "2026-09-04", "close": 4024.0, "value": 100600000, "return_pct": 0.6},
+    {"date": "2026-09-07", "close": 4032.0, "value": 100800000, "return_pct": 0.8},
+    {"date": "2026-09-08", "close": 4026.0, "value": 100650000, "return_pct": 0.65},
+    {"date": "2026-09-09", "close": 4010.0, "value": 100250000, "return_pct": 0.25},
+    {"date": "2026-09-10", "close": 3996.0, "value": 99900000, "return_pct": -0.1},
+    {"date": "2026-09-11", "close": 3988.0, "value": 99700000, "return_pct": -0.3},
+    {"date": "2026-09-14", "close": 3976.0, "value": 99400000, "return_pct": -0.6},
+    {"date": "2026-09-15", "close": 3984.0, "value": 99600000, "return_pct": -0.4},
+    {"date": "2026-09-16", "close": 3998.0, "value": 99950000, "return_pct": -0.05},
+    {"date": "2026-09-17", "close": 4006.0, "value": 100150000, "return_pct": 0.15},
+    {"date": "2026-09-18", "close": 4016.0, "value": 100400000, "return_pct": 0.4},
+    {"date": "2026-09-21", "close": 4022.0, "value": 100550000, "return_pct": 0.55},
+    {"date": "2026-09-22", "close": 4014.0, "value": 100350000, "return_pct": 0.35},
+    {"date": "2026-09-23", "close": 4020.0, "value": 100500000, "return_pct": 0.5},
+    {"date": "2026-09-28", "close": 4028.0, "value": 100700000, "return_pct": 0.7},
+    {"date": "2026-09-29", "close": 4034.0, "value": 100850000, "return_pct": 0.85}
+  ],
+  "charts": {
+    "equity": {
+      "viewbox": "0 0 720 250",
+      "width": 720,
+      "height": 250,
+      "unit": "누적 수익률(%)",
+      "y_min": -2.0,
+      "y_max": 2.0,
+      "y_labels": [2.0, 1.0, 0.0, -1.0, -2.0],
+      "zero_line_y": 125.0,
+      "zero_line_top_pct": 50.0,
+      "equity_points": "0.0,125.0 36.0,116.7 72.0,96.7 108.0,120.5 144.0,77.4 180.0,62.6 216.0,81.1 252.0,118.4 288.0,161.5 324.0,171.9 360.0,187.5 396.0,198.3 432.0,149.3 468.0,103.8 504.0,82.8 540.0,55.7 576.0,43.5 612.0,71.0 648.0,49.3 684.0,38.3 720.0,8.8",
+      "equity_area_path": "M0.0,125.0 L36.0,116.7 L72.0,96.7 L108.0,120.5 L144.0,77.4 L180.0,62.6 L216.0,81.1 L252.0,118.4 L288.0,161.5 L324.0,171.9 L360.0,187.5 L396.0,198.3 L432.0,149.3 L468.0,103.8 L504.0,82.8 L540.0,55.7 L576.0,43.5 L612.0,71.0 L648.0,49.3 L684.0,38.3 L720.0,8.8 L720.0,250.0 L0.0,250.0 Z",
+      "benchmark_points": "0.0,125.0 36.0,112.5 72.0,106.3 108.0,93.8 144.0,112.5 180.0,87.5 216.0,75.0 252.0,84.4 288.0,109.4 324.0,131.3 360.0,143.8 396.0,162.5 432.0,150.0 468.0,128.1 504.0,115.6 540.0,100.0 576.0,90.6 612.0,103.1 648.0,93.8 684.0,81.3 720.0,71.9",
+      "x_labels": [
+        {"label": "08-31", "x_pct": 5.0},
+        {"label": "09-07", "x_pct": 30.0},
+        {"label": "09-14", "x_pct": 55.0},
+        {"label": "09-21", "x_pct": 80.0},
+        {"label": "09-28", "x_pct": 95.0}
+      ],
+      "caption": "전략 +1.86%, KOSPI buy&hold +0.85%. 초과수익 +1.01%p, 최대 낙폭 -2.15%(2026-09-04 → 2026-09-14)."
+    },
+    "sparklines": {
+      "viewbox": "0 0 200 44",
+      "equity": "0.0,26.3 10.0,24.6 20.0,20.6 30.0,25.4 40.0,16.7 50.0,13.8 60.0,17.5 70.0,25.0 80.0,33.6 90.0,35.7 100.0,38.8 110.0,41.0 120.0,31.2 130.0,22.0 140.0,17.8 150.0,12.4 160.0,10.0 170.0,15.5 180.0,11.1 190.0,8.9 200.0,3.0",
+      "realized_pnl": "0.0,5.8 10.0,5.8 20.0,5.8 30.0,5.8 40.0,5.8 50.0,5.8 60.0,5.8 70.0,5.8 80.0,5.8 90.0,5.8 100.0,5.8 110.0,41.0 120.0,41.0 130.0,41.0 140.0,41.0 150.0,41.0 160.0,3.0 170.0,3.0 180.0,3.0 190.0,27.4 200.0,27.4",
+      "holdings": "0.0,41.0 10.0,3.0 20.0,3.0 30.0,3.0 40.0,3.0 50.0,3.0 60.0,3.0 70.0,3.0 80.0,3.0 90.0,3.0 100.0,3.0 110.0,3.0 120.0,3.0 130.0,3.0 140.0,3.0 150.0,3.0 160.0,3.0 170.0,3.0 180.0,3.0 190.0,3.0 200.0,3.0"
+    },
+    "win_donut": {
+      "win_pct": 33.33,
+      "conic_gradient": "conic-gradient(#1428A0 0% 33.33%, #E1E4EC 33.33% 100%)"
+    },
+    "trade_value_bars": [
+      {"label": "08-31", "value": 98795000, "height_pct": 100.0, "color": "#1428A0"},
+      {"label": "09-07", "value": 0, "height_pct": 0.0, "color": "#C2C8E8"},
+      {"label": "09-14", "value": 38854000, "height_pct": 39.33, "color": "#909BD6"},
+      {"label": "09-21", "value": 40989000, "height_pct": 41.49, "color": "#909BD6"},
+      {"label": "09-28", "value": 39161000, "height_pct": 39.64, "color": "#909BD6"}
+    ]
+  },
+  "positions": [
+    {"code": "035420", "name": "NAVER", "qty": 79, "avg_price": 250000, "cost_basis": 19752963, "last_price": 263000, "market_value": 20777000, "weight_pct": 20.3978, "unrealized_pnl": 1024037, "unrealized_pnl_pct": 5.1842, "sign": "pos", "entry_date": "2026-09-14", "holding_days": 9},
+    {"code": "005930", "name": "삼성전자", "qty": 249, "avg_price": 80000, "cost_basis": 19922988, "last_price": 83000, "market_value": 20667000, "weight_pct": 20.2898, "unrealized_pnl": 744012, "unrealized_pnl_pct": 3.7344, "sign": "pos", "entry_date": "2026-08-31", "holding_days": 19},
+    {"code": "005490", "name": "POSCO홀딩스", "qty": 67, "avg_price": 300000, "cost_basis": 20103015, "last_price": 304500, "market_value": 20401500, "weight_pct": 20.0292, "unrealized_pnl": 298485, "unrealized_pnl_pct": 1.4848, "sign": "pos", "entry_date": "2026-09-28", "holding_days": 1},
+    {"code": "000660", "name": "SK하이닉스", "qty": 39, "avg_price": 500000, "cost_basis": 19502925, "last_price": 521000, "market_value": 20319000, "weight_pct": 19.9482, "unrealized_pnl": 816075, "unrealized_pnl_pct": 4.1844, "sign": "pos", "entry_date": "2026-08-31", "holding_days": 19},
+    {"code": "068270", "name": "셀트리온", "qty": 112, "avg_price": 180000, "cost_basis": 20163024, "last_price": 175500, "market_value": 19656000, "weight_pct": 19.2973, "unrealized_pnl": -507024, "unrealized_pnl_pct": -2.5146, "sign": "neg", "entry_date": "2026-09-21", "holding_days": 4}
+  ],
+  "allocation": {
+    "as_of": "2026-09-29",
+    "total": 101858842,
+    "center": {"label": "주식 비중", "value_pct": 99.9624},
+    "conic_gradient": "conic-gradient(#1428A0 0% 20.4%, #4B5CC0 20.4% 40.69%, #7C9BFF 40.69% 60.72%, #909BD6 60.72% 80.67%, #C2C8E8 80.67% 99.96%, #DCE0E9 99.96% 100%)",
+    "segments": [
+      {"kind": "stock", "code": "035420", "label": "NAVER", "value": 20777000, "weight_pct": 20.3978, "start_pct": 0.0, "end_pct": 20.4, "color": "#1428A0"},
+      {"kind": "stock", "code": "005930", "label": "삼성전자", "value": 20667000, "weight_pct": 20.2898, "start_pct": 20.4, "end_pct": 40.69, "color": "#4B5CC0"},
+      {"kind": "stock", "code": "005490", "label": "POSCO홀딩스", "value": 20401500, "weight_pct": 20.0292, "start_pct": 40.69, "end_pct": 60.72, "color": "#7C9BFF"},
+      {"kind": "stock", "code": "000660", "label": "SK하이닉스", "value": 20319000, "weight_pct": 19.9482, "start_pct": 60.72, "end_pct": 80.67, "color": "#909BD6"},
+      {"kind": "stock", "code": "068270", "label": "셀트리온", "value": 19656000, "weight_pct": 19.2973, "start_pct": 80.67, "end_pct": 99.96, "color": "#C2C8E8"},
+      {"kind": "cash", "code": null, "label": "현금", "value": 38342, "weight_pct": 0.0376, "start_pct": 99.96, "end_pct": 100.0, "color": "#DCE0E9"}
+    ]
+  },
+  "trades": [
+    {"id": 1, "date": "2026-08-31", "signal_date": "2026-08-28", "code": "000660", "name": "SK하이닉스", "side": "BUY", "side_label": "매수", "qty": 39, "price": 500000, "amount": 19500000, "cost": 2925, "net_cash": -19502925, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 1)"},
+    {"id": 2, "date": "2026-08-31", "signal_date": "2026-08-28", "code": "005930", "name": "삼성전자", "side": "BUY", "side_label": "매수", "qty": 249, "price": 80000, "amount": 19920000, "cost": 2988, "net_cash": -19922988, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 2)"},
+    {"id": 3, "date": "2026-08-31", "signal_date": "2026-08-28", "code": "105560", "name": "KB금융", "side": "BUY", "side_label": "매수", "qty": 159, "price": 125000, "amount": 19875000, "cost": 2981, "net_cash": -19877981, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 3)"},
+    {"id": 4, "date": "2026-08-31", "signal_date": "2026-08-28", "code": "005380", "name": "현대차", "side": "BUY", "side_label": "매수", "qty": 49, "price": 400000, "amount": 19600000, "cost": 2940, "net_cash": -19602940, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 4)"},
+    {"id": 5, "date": "2026-08-31", "signal_date": "2026-08-28", "code": "000270", "name": "기아", "side": "BUY", "side_label": "매수", "qty": 199, "price": 100000, "amount": 19900000, "cost": 2985, "net_cash": -19902985, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 5)"},
+    {"id": 6, "date": "2026-09-14", "signal_date": "2026-09-11", "code": "000270", "name": "기아", "side": "SELL", "side_label": "매도", "qty": 199, "price": 96000, "amount": 19104000, "cost": 41074, "net_cash": 19062926, "realized_pnl": -840059, "realized_pnl_pct": -4.2208, "sign": "neg", "holding_days": 10, "reason": "목표 이탈"},
+    {"id": 7, "date": "2026-09-14", "signal_date": "2026-09-11", "code": "035420", "name": "NAVER", "side": "BUY", "side_label": "매수", "qty": 79, "price": 250000, "amount": 19750000, "cost": 2963, "net_cash": -19752963, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 2)"},
+    {"id": 8, "date": "2026-09-21", "signal_date": "2026-09-18", "code": "105560", "name": "KB금융", "side": "SELL", "side_label": "매도", "qty": 159, "price": 131000, "amount": 20829000, "cost": 44782, "net_cash": 20784218, "realized_pnl": 906237, "realized_pnl_pct": 4.559, "sign": "pos", "holding_days": 15, "reason": "목표 이탈"},
+    {"id": 9, "date": "2026-09-21", "signal_date": "2026-09-18", "code": "068270", "name": "셀트리온", "side": "BUY", "side_label": "매수", "qty": 112, "price": 180000, "amount": 20160000, "cost": 3024, "net_cash": -20163024, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 4)"},
+    {"id": 10, "date": "2026-09-28", "signal_date": "2026-09-23", "code": "005380", "name": "현대차", "side": "SELL", "side_label": "매도", "qty": 49, "price": 389000, "amount": 19061000, "cost": 40981, "net_cash": 19020019, "realized_pnl": -582921, "realized_pnl_pct": -2.9736, "sign": "neg", "holding_days": 18, "reason": "목표 이탈"},
+    {"id": 11, "date": "2026-09-28", "signal_date": "2026-09-23", "code": "005490", "name": "POSCO홀딩스", "side": "BUY", "side_label": "매수", "qty": 67, "price": 300000, "amount": 20100000, "cost": 3015, "net_cash": -20103015, "realized_pnl": null, "realized_pnl_pct": null, "sign": "zero", "holding_days": null, "reason": "목표 편입(순위 5)"}
+  ],
+  "per_stock": [
+    {"code": "035420", "name": "NAVER", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 1024037, "total_pnl": 1024037, "return_pct": 5.1842, "contribution_pct": 1.024, "sign": "pos", "bar_pct": 100.0, "trade_value": 19750000, "trade_volume": 79},
+    {"code": "105560", "name": "KB금융", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 1, "win_rate_pct": 100.0, "realized_pnl": 906237, "unrealized_pnl": 0, "total_pnl": 906237, "return_pct": 4.559, "contribution_pct": 0.9062, "sign": "pos", "bar_pct": 88.5, "trade_value": 40704000, "trade_volume": 318},
+    {"code": "000660", "name": "SK하이닉스", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 816075, "total_pnl": 816075, "return_pct": 4.1844, "contribution_pct": 0.8161, "sign": "pos", "bar_pct": 79.69, "trade_value": 19500000, "trade_volume": 39},
+    {"code": "005930", "name": "삼성전자", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 744012, "total_pnl": 744012, "return_pct": 3.7344, "contribution_pct": 0.744, "sign": "pos", "bar_pct": 72.65, "trade_value": 19920000, "trade_volume": 249},
+    {"code": "005490", "name": "POSCO홀딩스", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 298485, "total_pnl": 298485, "return_pct": 1.4848, "contribution_pct": 0.2985, "sign": "pos", "bar_pct": 29.15, "trade_value": 20100000, "trade_volume": 67},
+    {"code": "068270", "name": "셀트리온", "status": "held", "status_label": "보유", "trade_count": 1, "buy_count": 1, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": -507024, "total_pnl": -507024, "return_pct": -2.5146, "contribution_pct": -0.507, "sign": "neg", "bar_pct": 49.51, "trade_value": 20160000, "trade_volume": 112},
+    {"code": "005380", "name": "현대차", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 0, "win_rate_pct": 0.0, "realized_pnl": -582921, "unrealized_pnl": 0, "total_pnl": -582921, "return_pct": -2.9736, "contribution_pct": -0.5829, "sign": "neg", "bar_pct": 56.92, "trade_value": 38661000, "trade_volume": 98},
+    {"code": "000270", "name": "기아", "status": "closed", "status_label": "청산", "trade_count": 2, "buy_count": 1, "sell_count": 1, "closed_count": 1, "win_count": 0, "win_rate_pct": 0.0, "realized_pnl": -840059, "unrealized_pnl": 0, "total_pnl": -840059, "return_pct": -4.2208, "contribution_pct": -0.8401, "sign": "neg", "bar_pct": 82.03, "trade_value": 39004000, "trade_volume": 398},
+    {"code": "207940", "name": "삼성바이오로직스", "status": "no_trade", "status_label": "거래 없음", "trade_count": 0, "buy_count": 0, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 0, "total_pnl": 0, "return_pct": null, "contribution_pct": 0.0, "sign": "zero", "bar_pct": 0.0, "trade_value": 0, "trade_volume": 0},
+    {"code": "373220", "name": "LG에너지솔루션", "status": "excluded", "status_label": "제외(데이터 없음)", "trade_count": 0, "buy_count": 0, "sell_count": 0, "closed_count": 0, "win_count": 0, "win_rate_pct": null, "realized_pnl": 0, "unrealized_pnl": 0, "total_pnl": 0, "return_pct": null, "contribution_pct": 0.0, "sign": "zero", "bar_pct": 0.0, "trade_value": 0, "trade_volume": 0}
+  ],
+  "top_contributors": {
+    "items": [
+      {"rank": 1, "code": "035420", "name": "NAVER", "pnl": 1024037, "sign": "pos", "bar_pct": 100.0},
+      {"rank": 2, "code": "105560", "name": "KB금융", "pnl": 906237, "sign": "pos", "bar_pct": 88.5},
+      {"rank": 3, "code": "000660", "name": "SK하이닉스", "pnl": 816075, "sign": "pos", "bar_pct": 79.69},
+      {"rank": 4, "code": "005930", "name": "삼성전자", "pnl": 744012, "sign": "pos", "bar_pct": 72.65},
+      {"rank": 5, "code": "005490", "name": "POSCO홀딩스", "pnl": 298485, "sign": "pos", "bar_pct": 29.15}
+    ],
+    "note": "상위 5종목 손익 합계 +3,788,846원, 손실 3종목 합계 -1,930,004원입니다."
+  },
+  "weekly_flow": [
+    {
+      "label": "08-31", "start": "2026-08-31", "end": "2026-09-04", "trading_days": 5,
+      "buy_value": 98795000, "sell_value": 0, "buy_count": 5, "sell_count": 0,
+      "holdings_value": 99807900, "cash": 1190181,
+      "segments": [
+        {"key": "buy", "label": "매수", "value": 98795000, "height_pct": 49.45, "color": "#1428A0"},
+        {"key": "sell", "label": "매도", "value": 0, "height_pct": 0.0, "color": "#4B5CC0"},
+        {"key": "holdings", "label": "보유", "value": 99807900, "height_pct": 49.96, "color": "#7C9BFF"},
+        {"key": "cash", "label": "현금", "value": 1190181, "height_pct": 0.59, "color": "#C2C8E8"}
+      ]
+    },
+    {
+      "label": "09-07", "start": "2026-09-07", "end": "2026-09-11", "trading_days": 5,
+      "buy_value": 0, "sell_value": 0, "buy_count": 0, "sell_count": 0,
+      "holdings_value": 97809200, "cash": 1190181,
+      "segments": [
+        {"key": "buy", "label": "매수", "value": 0, "height_pct": 0.0, "color": "#1428A0"},
+        {"key": "sell", "label": "매도", "value": 0, "height_pct": 0.0, "color": "#4B5CC0"},
+        {"key": "holdings", "label": "보유", "value": 97809200, "height_pct": 98.8, "color": "#7C9BFF"},
+        {"key": "cash", "label": "현금", "value": 1190181, "height_pct": 1.2, "color": "#C2C8E8"}
+      ]
+    },
+    {
+      "label": "09-14", "start": "2026-09-14", "end": "2026-09-18", "trading_days": 5,
+      "buy_value": 19750000, "sell_value": 19104000, "buy_count": 1, "sell_count": 1,
+      "holdings_value": 100609200, "cash": 500144,
+      "segments": [
+        {"key": "buy", "label": "매수", "value": 19750000, "height_pct": 14.11, "color": "#1428A0"},
+        {"key": "sell", "label": "매도", "value": 19104000, "height_pct": 13.65, "color": "#4B5CC0"},
+        {"key": "holdings", "label": "보유", "value": 100609200, "height_pct": 71.88, "color": "#7C9BFF"},
+        {"key": "cash", "label": "현금", "value": 500144, "height_pct": 0.36, "color": "#C2C8E8"}
+      ]
+    },
+    {
+      "label": "09-21", "start": "2026-09-21", "end": "2026-09-23", "trading_days": 3,
+      "buy_value": 20160000, "sell_value": 20829000, "buy_count": 1, "sell_count": 1,
+      "holdings_value": 100089900, "cash": 1121338,
+      "segments": [
+        {"key": "buy", "label": "매수", "value": 20160000, "height_pct": 14.18, "color": "#1428A0"},
+        {"key": "sell", "label": "매도", "value": 20829000, "height_pct": 14.65, "color": "#4B5CC0"},
+        {"key": "holdings", "label": "보유", "value": 100089900, "height_pct": 70.39, "color": "#7C9BFF"},
+        {"key": "cash", "label": "현금", "value": 1121338, "height_pct": 0.78, "color": "#C2C8E8"}
+      ]
+    },
+    {
+      "label": "09-28", "start": "2026-09-28", "end": "2026-09-29", "trading_days": 2,
+      "buy_value": 20100000, "sell_value": 19061000, "buy_count": 1, "sell_count": 1,
+      "holdings_value": 101820500, "cash": 38342,
+      "segments": [
+        {"key": "buy", "label": "매수", "value": 20100000, "height_pct": 14.25, "color": "#1428A0"},
+        {"key": "sell", "label": "매도", "value": 19061000, "height_pct": 13.52, "color": "#4B5CC0"},
+        {"key": "holdings", "label": "보유", "value": 101820500, "height_pct": 72.2, "color": "#7C9BFF"},
+        {"key": "cash", "label": "현금", "value": 38342, "height_pct": 0.03, "color": "#C2C8E8"}
+      ]
+    }
+  ],
+  "alerts": [
+    {"level": "warn", "code": "DATA_MISSING", "title": "LG에너지솔루션 데이터 82일 결측.", "detail": "373220 · 조회 결과 0건 · 유니버스에서 제외", "date": null, "color": "#C98A2E"},
+    {"level": "info", "code": "LOW_SAMPLE", "title": "1개월(20거래일) 표본은 통계적 의미가 약합니다.", "detail": "리밸런싱 5회 · 청산 거래 3건", "date": null, "color": "#1428A0"}
+  ],
+  "insights": [
+    {"no": "01", "title": "벤치마크 대비", "detail": "기간 수익률 +1.86%로 KOSPI(+0.85%)를 +1.01%p 상회했습니다."},
+    {"no": "02", "title": "종목 기여", "detail": "NAVER이(가) +1,024,037원으로 가장 크게 기여했고, 기아이(가) -840,059원으로 가장 크게 깎았습니다."},
+    {"no": "03", "title": "거래·위험", "detail": "총 11회 체결, 청산 3건 중 승률 33.33%이며 최대 낙폭(MDD)은 -2.15%입니다. 최대 손실 거래는 기아 2026-09-14 -840,059원입니다."}
+  ],
+  "next_action": {
+    "label": "다음 조치",
+    "text": "리스크 알림 1건을 먼저 확인하세요: LG에너지솔루션 데이터 82일 결측."
+  },
+  "target": {
+    "target_return_pct": 2.0,
+    "actual_return_pct": 1.8588,
+    "sign": "pos",
+    "target_equity": 102000000,
+    "gap_amount": 141158,
+    "achieved": false,
+    "progress_raw_pct": 92.9421,
+    "progress_pct": 92.94,
+    "bar_segments": [
+      {"key": "realized", "label": "실현", "width_pct": 0.0, "color": "#1428A0"},
+      {"key": "unrealized", "label": "미실현", "width_pct": 92.94, "color": "#7C9BFF"}
+    ],
+    "caption": "목표 +2.00% 대비 92.94% 달성. 목표 평가금액까지 141,158원 남았습니다."
+  }
+}
