@@ -10,3 +10,6 @@ stock-sim/output/*.tmp
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# GitHub Pages 빌드 산출물
+/_site/
