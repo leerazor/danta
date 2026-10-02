@@ -1,0 +1,8 @@
+[
+  {"id":"longer-entry","hypothesis":"돌파 확인 구간을 늘려 짧은 가격 잡음에 의한 진입을 줄인다.","overrides":{"entry_lookback":12}},
+  {"id":"stronger-volume","hypothesis":"거래량 확인을 강화해 약한 돌파의 거래 비용을 줄인다.","overrides":{"vol_mult":2.0}},
+  {"id":"slower-exit","hypothesis":"청산 채널을 늘려 추세 중 일시적인 되돌림을 견딘다.","overrides":{"exit_lookback":6}},
+  {"id":"fewer-entries","hypothesis":"종목당 하루 진입을 두 번으로 제한해 반복 거래 비용을 줄인다.","overrides":{"max_entries_per_symbol_per_day":2}},
+  {"id":"longer-cooldown","hypothesis":"청산 후 재진입 대기를 늘려 횡보 구간의 반복 손실을 줄인다.","overrides":{"cooldown_bars":6}},
+  {"id":"earlier-cutoff","hypothesis":"오후 늦은 진입을 줄여 강제 청산까지 남은 시간이 짧은 거래를 피한다.","overrides":{"entry_cutoff":"14:00"}}
+]

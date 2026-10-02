@@ -32,8 +32,8 @@ jobs:
           python-version: '3.11'
           enable-cache: true
           cache-dependency-glob: stock-sim/uv.lock
-      - name: Check dashboard rendering
-        run: uv run --frozen --project stock-sim pytest stock-sim/tests/test_render.py
+      - name: Check backtest, research gates, and rendering
+        run: uv run --frozen --project stock-sim pytest stock-sim/tests
       - name: Build static dashboard
         shell: bash
         run: |

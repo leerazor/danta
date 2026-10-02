@@ -1,0 +1,22 @@
+name: Backtest and research checks
+on:
+  push:
+    branches: [main]
+    paths: ['stock-sim/**', '.github/workflows/tests.yml']
+  pull_request:
+    paths: ['stock-sim/**', '.github/workflows/tests.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.12.13'
+          python-version: '3.11'
+          enable-cache: true
+          cache-dependency-glob: stock-sim/uv.lock
+      - run: uv run --frozen --project stock-sim pytest stock-sim/tests

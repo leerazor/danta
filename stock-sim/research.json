@@ -1,0 +1,14 @@
+{
+  "history_calendar_days": 180,
+  "paper_calendar_days": 30,
+  "train_days": 40,
+  "validation_days": 20,
+  "holdout_days": 10,
+  "max_candidates": 6,
+  "min_remaining_percent": 20,
+  "min_closed_trades": 10,
+  "min_improvement": 0.005,
+  "max_mdd": 0.12,
+  "max_mdd_regression": 0.005,
+  "stress_slippage_rate": 0.001
+}

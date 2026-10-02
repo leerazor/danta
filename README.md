@@ -4,6 +4,16 @@
 
 대시보드: <https://leerazor.github.io/danta/>
 
+## 자동 연구·과거 모의투자
+
+Codex 구독 잔여 사용량을 확인하는 6시간 주기 연구 흐름과 분봉 백테스트 실행기를 제공합니다.
+최대 6개 후보를 비교하고, 등록 이후 새로 쌓인 거래일의 검증을 통과한 후보만 모의투자에 채택합니다.
+별도 OpenAI API 호출은 없으며, 실제 시세가 없으면 데이터 대기 상태로 종료합니다.
+실제 자동 실행에는 Codex 예약 작업 등록과 실행 중인 앱·컴퓨터가 필요합니다.
+
+데이터 준비, 실행 명령, 검증 기준, 실행 상태는
+[자동 연구 안내](stock-sim/docs/AUTORESEARCH.md)를 참고하세요.
+
 ## GitHub Pages 배포
 
 저장소 **Settings → Pages → Build and deployment → Source**는 **GitHub Actions**로 설정합니다.

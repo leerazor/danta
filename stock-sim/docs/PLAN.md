@@ -3,6 +3,11 @@
 작성일 2026-09-30 · 현재 상태: **W3 완료(Phase 3·4 reviewer PASS 2회차), W4 최종 실행 완료 — 사용자 확인 대기(v1)**
 
 ## 0. 진행 체크리스트 (오케스트레이터가 갱신)
+- [x] 2026-10-02 자동 연구 개발 — Codex 구독 잔여 사용량·6시간 주기, 최대 6개 후보,
+  등록 이후 10거래일 검증·비용 스트레스·중복 실행 방지·기존 엔진 과거 모의투자.
+  실행 규약: `docs/AUTORESEARCH.md`. 별도 API 과금 없이 heartbeat 자동화 `danta-6` 등록.
+- [ ] 자동 연구 실데이터 첫 실행 — 이 컴퓨터에는 과거 시세 캐시와 KIS DEV 설정이 없어
+  `data_unavailable` 상태. 기존 예제 Pages 유지. 데이터 준비 후 과거 모의투자·후보 연구 시작.
 - [x] Phase 0 지침 수립 — `CLAUDE.md`, `.claude/agents/` 6개, 이 문서
 - [x] W1 · Phase 1 조사 — `kis-researcher` ×3 병렬 → `docs/research/{kis-api,market-rules,universe}.md` (결론: DEV 일봉·지수 일봉 지원 추정(샘플 코드 근거, 실호출 미검증 → Phase 3 smoke test에서 확정))
 - [x] W2 · Phase 2a 로직 — `strategy-designer` → `docs/strategy.md` → reviewer PASS (확정 전략: 20일 수익률 상위 5종목 주간 리밸런싱 `momentum_topn`)
